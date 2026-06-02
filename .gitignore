@@ -1,0 +1,43 @@
+# Dependências
+node_modules/
+
+# Variáveis de ambiente (nunca versionar)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.test
+
+# Build
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Docker volumes locais
+mysql-data/
+redis-data/
+
+# Ativos brutos de design (101MB — usar LFS se necessário)
+design/
+
+# Arquivos temporários do Vite
+vite.config.js.timestamp-*
+
+# Claude Code — configurações locais (caminhos e permissões da máquina)
+.claude/settings.local.json
