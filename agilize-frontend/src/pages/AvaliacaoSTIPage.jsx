@@ -8,6 +8,7 @@ import {
 import { demandaService, usuarioService } from '../services/api';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import RichTextEditor from '../components/RichTextEditor';
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -181,13 +182,14 @@ function DiagnosticoIA({ diagnostico, carregando }) {
 }
 
 function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
-  const [parecer, setParecer]       = useState('');
-  const [comentario, setComentario] = useState('');
-  const [motivo, setMotivo]         = useState('');
-  const [tipoDeploy, setTipoDeploy] = useState('');
-  const [acaoAtiva, setAcaoAtiva]   = useState(null);
-  const [enviando, setEnviando]     = useState(false);
-  const [erroLocal, setErroLocal]   = useState('');
+  const [parecer, setParecer]           = useState('');
+  const [parecerText, setParecerText]   = useState('');
+  const [comentario, setComentario]     = useState('');
+  const [motivo, setMotivo]             = useState('');
+  const [tipoDeploy, setTipoDeploy]     = useState('');
+  const [acaoAtiva, setAcaoAtiva]       = useState(null);
+  const [enviando, setEnviando]         = useState(false);
+  const [erroLocal, setErroLocal]       = useState('');
 
   // Modal encaminhar ao diretor
   const [showDiretorModal, setShowDiretorModal] = useState(false);
@@ -248,12 +250,12 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
     setErroLocal('');
     if (['reprovar-sti', 'rejeitar-homologacao'].includes(acao)) {
       if (!motivo.trim()) { setErroLocal('Informe o motivo'); return false; }
-      if (parecer.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
+      if (parecerText.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
     } else if (acao === 'homologar') {
-      if (parecer.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
+      if (parecerText.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
       if (!tipoDeploy) { setErroLocal('Selecione o tipo de deploy'); return false; }
     } else {
-      if (parecer.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
+      if (parecerText.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
     }
     return true;
   };
@@ -332,13 +334,17 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
             Parecer técnico <span className="text-red-500">*</span>
             <span className="font-normal text-neutral-400 ml-1">(mín. 20 caracteres)</span>
           </label>
-          <textarea className={ic + ' resize-none'} rows={5} value={parecer}
-            onChange={e => setParecer(e.target.value)}
+          <RichTextEditor
+            value={parecer}
+            onChange={setParecer}
+            onTextChange={setParecerText}
+            minRows={5}
             placeholder={isFase1
               ? 'Descreva a análise de viabilidade: adequação técnica, riscos, dependências, alinhamento com a política institucional...'
               : 'Descreva o resultado da homologação: qualidade técnica, conformidade, testes realizados, critérios de aceite...'
-            } />
-          <p className="text-right text-[11px] text-neutral-400 mt-0.5">{parecer.length} / 5000</p>
+            }
+          />
+          <p className="text-right text-[11px] text-neutral-400 mt-0.5">{parecerText.length} / 5000</p>
         </div>
 
         {/* Comentário opcional */}

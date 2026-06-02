@@ -4,6 +4,7 @@ import { demandaService } from '../services/api';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import RichTextEditor from '../components/RichTextEditor';
 import {
   ArrowLeft, User, AlertTriangle, CheckCircle, XCircle,
   Loader2, ChevronDown, ChevronUp, Server, Info,
@@ -484,9 +485,10 @@ function HistoricoItem({ item }) {
           <StatusBadge status={item.status_novo} />
         </div>
         {item.parecer && (
-          <div className="mt-2 text-sm text-neutral-600 bg-neutral-50 rounded-lg px-3 py-2 border border-neutral-100 leading-relaxed">
-            {item.parecer}
-          </div>
+          <div
+            className="mt-2 text-sm text-neutral-600 bg-neutral-50 rounded-lg px-3 py-2 border border-neutral-100 leading-relaxed rich-text-content"
+            dangerouslySetInnerHTML={{ __html: item.parecer }}
+          />
         )}
         {item.comentario && <p className="mt-1 text-xs text-neutral-400 italic">{item.comentario}</p>}
         {item.motivo_rejeicao && (
@@ -587,24 +589,25 @@ function Dependencias({ demanda }) {
 // ─── Modal de ação ─────────────────────────────────────────────────────────
 
 function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
-  const [parecer, setParecer]       = useState('');
-  const [comentario, setComentario] = useState('');
-  const [motivo, setMotivo]         = useState('');
-  const [tipoDeploy, setTipoDeploy] = useState('');
-  const [erro, setErro]             = useState('');
+  const [parecer, setParecer]         = useState('');
+  const [parecerText, setParecerText] = useState('');
+  const [comentario, setComentario]   = useState('');
+  const [motivo, setMotivo]           = useState('');
+  const [tipoDeploy, setTipoDeploy]   = useState('');
+  const [erro, setErro]               = useState('');
 
   const ic = `w-full px-3.5 py-2.5 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-tce-500 focus:border-tce-500 transition`;
 
   const handleConfirmar = () => {
-    if (acao.tipo === 'parecer' && parecer.trim().length < 20) {
+    if (acao.tipo === 'parecer' && parecerText.trim().length < 20) {
       setErro('O parecer precisa ter pelo menos 20 caracteres'); return;
     }
     if (acao.tipo === 'rejeicao') {
       if (!motivo.trim()) { setErro('Informe o motivo'); return; }
-      if (parecer.trim().length < 20) { setErro('O parecer precisa ter pelo menos 20 caracteres'); return; }
+      if (parecerText.trim().length < 20) { setErro('O parecer precisa ter pelo menos 20 caracteres'); return; }
     }
     if (acao.tipo === 'homologar') {
-      if (parecer.trim().length < 20) { setErro('O parecer precisa ter pelo menos 20 caracteres'); return; }
+      if (parecerText.trim().length < 20) { setErro('O parecer precisa ter pelo menos 20 caracteres'); return; }
       if (!tipoDeploy) { setErro('Defina o tipo de deploy'); return; }
     }
     if (acao.tipo === 'motivo' && !motivo.trim()) {
@@ -640,9 +643,13 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
               Parecer <span className="text-red-500">*</span>
               <span className="font-normal text-neutral-400 ml-1">(mín. 20 caracteres)</span>
             </label>
-            <textarea className={ic + ' resize-none'} rows={4} value={parecer}
-              onChange={e => setParecer(e.target.value)}
-              placeholder="Descreva sua análise ou decisão..." />
+            <RichTextEditor
+              value={parecer}
+              onChange={setParecer}
+              onTextChange={setParecerText}
+              minRows={4}
+              placeholder="Descreva sua análise ou decisão..."
+            />
           </div>
         )}
 

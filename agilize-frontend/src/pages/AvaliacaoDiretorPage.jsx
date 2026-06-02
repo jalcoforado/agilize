@@ -8,6 +8,7 @@ import {
 import { demandaService } from '../services/api';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import RichTextEditor from '../components/RichTextEditor';
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -66,11 +67,12 @@ function Secao({ titulo, children, defaultOpen = true }) {
 }
 
 function FormularioDiretor({ status, idDemanda, onSucesso, onErro }) {
-  const [parecer, setParecer]       = useState('');
-  const [comentario, setComentario] = useState('');
-  const [acaoAtiva, setAcaoAtiva]   = useState(null);
-  const [enviando, setEnviando]     = useState(false);
-  const [erroLocal, setErroLocal]   = useState('');
+  const [parecer, setParecer]         = useState('');
+  const [parecerText, setParecerText] = useState('');
+  const [comentario, setComentario]   = useState('');
+  const [acaoAtiva, setAcaoAtiva]     = useState(null);
+  const [enviando, setEnviando]       = useState(false);
+  const [erroLocal, setErroLocal]     = useState('');
 
   const isFase1 = status === 'AGUARDANDO_DIRETOR';
   const isFase3 = status === 'AGUARDANDO_DIRETOR_HOMOLOGACAO';
@@ -87,7 +89,7 @@ function FormularioDiretor({ status, idDemanda, onSucesso, onErro }) {
 
   const validar = () => {
     setErroLocal('');
-    if (parecer.trim().length < 10) {
+    if (parecerText.trim().length < 10) {
       setErroLocal('Parecer precisa ter pelo menos 10 caracteres');
       return false;
     }
@@ -133,10 +135,14 @@ function FormularioDiretor({ status, idDemanda, onSucesso, onErro }) {
             Parecer / Orientação <span className="text-red-500">*</span>
             <span className="font-normal text-neutral-400 ml-1">(mín. 10 caracteres)</span>
           </label>
-          <textarea className={ic + ' resize-none'} rows={5} value={parecer}
-            onChange={e => setParecer(e.target.value)}
-            placeholder="Descreva sua orientação, pontos críticos identificados, ou o motivo para solicitar ajustes..." />
-          <p className="text-right text-[11px] text-neutral-400 mt-0.5">{parecer.length} / 5000</p>
+          <RichTextEditor
+            value={parecer}
+            onChange={setParecer}
+            onTextChange={setParecerText}
+            minRows={5}
+            placeholder="Descreva sua orientação, pontos críticos identificados, ou o motivo para solicitar ajustes..."
+          />
+          <p className="text-right text-[11px] text-neutral-400 mt-0.5">{parecerText.length} / 5000</p>
         </div>
 
         <div>
