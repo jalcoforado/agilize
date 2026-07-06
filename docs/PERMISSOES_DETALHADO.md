@@ -66,84 +66,77 @@
 **Descrição:** Membro da STI que analisa e aprova demandas
 
 **Responsabilidades:**
-- Visualizar fila de demandas validadas por gestor (VALIDADA_GESTOR)
-- Analisar viabilidade técnica
+- Visualizar fila de demandas validadas por gestor (VALIDADA_GESTOR e FILA_STI)
+- Analisar viabilidade técnica com apoio do diagnóstico IA
 - Estimar esforço e recursos
 - Identificar riscos
 - Aprovar demanda (APROVADA_STI)
-- Rejeitar demanda com parecer técnico
+- Reprovar demanda com parecer técnico
 - Solicitar ajustes (SOLICITADO_AJUSTES_STI)
-- Atribuir responsável de desenvolvimento
-- Visualizar histórico completo (incluindo validação de gestor)
+- Encaminhar ao Avaliador Técnico quando necessário (AGUARDANDO_AVALIADOR)
+- Homologar produto na Fase 3 (HOMOLOGADA)
+- Solicitar ajustes de homologação (SOLICITADO_AJUSTES_HOMOLOGACAO)
+- Encaminhar ao Avaliador Técnico na homologação (AGUARDANDO_AVALIADOR_HOMOLOGACAO)
+- Visualizar histórico completo
 
 **NÃO pode:**
 - ❌ Validar demandas que não foram aprovadas por gestor
-- ❌ Iniciar desenvolvimento (Dev Lead faz isso)
 - ❌ Rejeitar demanda validada por gestor sem análise técnica
 - ❌ Acessar dados sensíveis da unidade solicitante
 
 ---
 
-### 1.5 RESPONSAVEL_DESENVOLVIMENTO
-**Descrição:** Líder técnico que gerencia fase de desenvolvimento
+### 1.5 AVALIADOR_TECNICO
+**Descrição:** Nível de revisão superior dentro da STI; atua quando o Analista STI encaminha uma demanda para revisão
 
 **Responsabilidades:**
-- Visualizar demandas aprovadas (APROVADA_STI)
-- Iniciar desenvolvimento (APROVADA_STI → EM_DESENVOLVIMENTO)
-- Atualizar progresso de desenvolvimento
-- Coordenar com time de dev
-- Submeter para homologação
-- Receber feedback de QA
-- Documentar decisões técnicas no histórico
+- Visualizar demandas encaminhadas pelo Analista (AGUARDANDO_AVALIADOR / AGUARDANDO_AVALIADOR_HOMOLOGACAO)
+- Devolver ao Analista para reanálise (→ FILA_STI / FILA_HOMOLOGACAO_STI)
+- Solicitar ajustes ao Solicitante diretamente (→ SOLICITANTE_AJUSTANDO / AJUSTANDO_HOMOLOGACAO)
+- Registrar parecer formal no histórico
+- Visualizar histórico completo das demandas sob revisão
 
 **NÃO pode:**
-- ❌ Aprovar/Rejeitar demandas
+- ❌ Aprovar ou homologar diretamente (decisão final é do Analista STI)
+- ❌ Encaminhar à fila de produção
 - ❌ Editar dados originais da demanda
-- ❌ Acessar validações de gestor (apenas ler)
-- ❌ Enviar para produção (responsabilidade de Ops)
 
 ---
 
-### 1.6 RESPONSAVEL_HOMOLOGACAO
-**Descrição:** Líder de QA que testa e valida funcionalidades
+### 1.5b DPO
+**Descrição:** Data Protection Officer — verifica conformidade LGPD para soluções com dados sensíveis
 
 **Responsabilidades:**
-- Visualizar demandas em EM_DESENVOLVIMENTO
-- Receber demandas de dev para testes (EM_HOMOLOGACAO)
-- Executar testes
-- Rejeitar com bugs/ajustes necessários
-- Aprovar e liberar para produção
-- Documentar testes realizados
-- Atualizar status no workflow
+- Analisar demandas com dados sensíveis antes da STI (Fase 1)
+- Analisar produto entregue com dados sensíveis antes da homologação STI (Fase 3)
+- Aprovar encaminhamento à STI
+- Solicitar ajustes diretamente ao Solicitante
+- Registrar parecer formal no histórico
 
 **NÃO pode:**
-- ❌ Fazer código review (responsabilidade de Dev)
-- ❌ Rejeitar por motivos que não sejam técnicos
-- ❌ Alterar prioridade de testes
-- ❌ Acessar dados sensíveis da demanda
+- ❌ Aprovar/reprovar demandas sem passar pelo Gestor primeiro
+- ❌ Acessar fila STI ou executar ações de Analista
+- ❌ Atuar nas Fases 2 e 4
 
 ---
 
-### 1.7 RESPONSAVEL_PRODUCAO
+### 1.6 RESPONSAVEL_PRODUCAO
 **Descrição:** Operações que gerenciam deploy e produção
 
 **Responsabilidades:**
-- Visualizar demandas em EM_HOMOLOGACAO
-- Receber demandas para produção (EM_PRODUCAO)
-- Executar deploy
+- Visualizar demandas homologadas (HOMOLOGADA)
+- Iniciar e confirmar deploy (EM_PRODUCAO → EM_MONITORAMENTO)
 - Monitorar funcionamento
 - Registrar ocorrências
-- Finalizar demanda (FINALIZADA)
-- Arquivar demanda
 
 **NÃO pode:**
-- ❌ Rejeitar demanda em produção (escalação apenas)
+- ❌ Aprovar/Reprovar demandas
 - ❌ Alterar dados da demanda
-- ❌ Acessar código ou testes
+- ❌ Atuar nas Fases 1, 2 e 3
 
 ---
 
-### 1.8 GESTOR_SISTEMA
+### 1.7 GESTOR_SISTEMA
 **Descrição:** Administrador com acesso total
 
 **Responsabilidades:**
@@ -166,44 +159,45 @@
 
 ## 2. MATRIZ DE PERMISSÕES EXPANDIDA
 
-| Ação | Solicitante | Gestor Unit | Gestor Dept | Analista STI | Dev | QA | Ops | Admin |
-|------|:-----------:|:-----------:|:-----------:|:------------:|:---:|:---:|:---:|:------:|
+| Ação | Solicitante | Gestor Unit | Gestor Dept | Analista STI | Avaliador Técnico | Ops | Admin |
+|------|:-----------:|:-----------:|:-----------:|:------------:|:-----------:|:---:|:------:|
 | **DEMANDA - Criação** |
-| Criar nova | ✅ | ✅ | ✅ | - | - | - | - | ✅ |
-| Editar (DRAFT) | ✅ | - | - | - | - | - | - | ✅ |
-| Editar (AJUSTES) | ✅ | - | - | - | - | - | - | ✅ |
-| Visualizar própria | ✅ | - | - | - | - | - | - | ✅ |
-| Visualizar todas | - | ✅ (unidade) | ✅ (depto) | ✅ (todas) | ✅ (dev) | ✅ (homolog) | - | ✅ |
-| Deletar própria | ✅ (DRAFT) | - | - | - | - | - | - | ✅ |
-| **DEMANDA - Workflow** |
-| Enviar para Gestor | ✅ | - | - | - | - | - | - | ✅ |
-| Validar (Gestor) | - | ✅ | - | - | - | - | - | ✅ |
-| Rejeitar (Gestor) | - | ✅ | - | - | - | - | - | ✅ |
-| Devolver (Gestor) | - | ✅ | - | - | - | - | - | ✅ |
-| Encaminhar STI | - | ✅ | ✅ | - | - | - | - | ✅ |
-| Visualizar Fila STI | - | - | - | ✅ | - | - | - | ✅ |
-| Avaliar (STI) | - | - | - | ✅ | - | - | - | ✅ |
-| Aprovar (STI) | - | - | - | ✅ | - | - | - | ✅ |
-| Rejeitar (STI) | - | - | - | ✅ | - | - | - | ✅ |
-| Solicitar Ajustes (STI) | - | - | - | ✅ | - | - | - | ✅ |
-| Iniciar Dev | - | - | - | ✅ | ✅ | - | - | ✅ |
-| Atualizar Dev | - | - | - | - | ✅ | - | - | ✅ |
-| Enviar QA | - | - | - | - | ✅ | - | - | ✅ |
-| Validar QA | - | - | - | - | - | ✅ | - | ✅ |
-| Rejeitar QA | - | - | - | - | - | ✅ | - | ✅ |
-| Enviar Produção | - | - | - | - | - | ✅ | - | ✅ |
-| Deploy Produção | - | - | - | - | - | - | ✅ | ✅ |
-| Finalizar | - | - | - | - | - | - | ✅ | ✅ |
+| Criar nova | ✅ | ✅ | ✅ | - | - | - | ✅ |
+| Editar (DRAFT) | ✅ | - | - | - | - | - | ✅ |
+| Editar (AJUSTES) | ✅ | - | - | - | - | - | ✅ |
+| Visualizar própria | ✅ | - | - | - | - | - | ✅ |
+| Visualizar todas | - | ✅ (unidade) | ✅ (depto) | ✅ (todas) | ✅ (atribuídas) | - | ✅ |
+| Deletar própria | ✅ (DRAFT) | - | - | - | - | - | ✅ |
+| **DEMANDA - Workflow (Fase 1 e 3)** |
+| Enviar para Gestor | ✅ | - | - | - | - | - | ✅ |
+| Iniciar desenvolvimento | ✅ | - | - | - | - | - | ✅ |
+| Submeter produto | ✅ | - | - | - | - | - | ✅ |
+| Validar (Gestor) | - | ✅ | - | - | - | - | ✅ |
+| Rejeitar (Gestor) | - | ✅ | - | - | - | - | ✅ |
+| Devolver (Gestor) | - | ✅ | - | - | - | - | ✅ |
+| Encaminhar STI | - | ✅ | ✅ | - | - | - | ✅ |
+| Visualizar Fila STI | - | - | - | ✅ | - | - | ✅ |
+| Aprovar (STI) | - | - | - | ✅ | - | - | ✅ |
+| Reprovar (STI) | - | - | - | ✅ | - | - | ✅ |
+| Solicitar Ajustes (STI) | - | - | - | ✅ | - | - | ✅ |
+| Homologar | - | - | - | ✅ | - | - | ✅ |
+| Encaminhar Avaliador Técnico | - | - | - | ✅ | - | - | ✅ |
+| Devolver ao Analista | - | - | - | - | ✅ | - | ✅ |
+| Solicitar Ajustes (Avaliador) | - | - | - | - | ✅ | - | ✅ |
+| **DEMANDA - Workflow (Fase 4)** |
+| Deploy Produção | - | - | - | - | - | ✅ | ✅ |
+| Confirmar Deploy | - | - | - | - | - | ✅ | ✅ |
+| Desativar | - | - | - | ✅ | - | - | ✅ |
 | **HISTÓRICO** |
-| Visualizar próprio | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Visualizar tudo | - | ✅ (unidade) | ✅ (depto) | ✅ (todas) | - | - | - | ✅ |
-| Exportar histórico | - | ✅ | ✅ | ✅ | - | - | - | ✅ |
+| Visualizar próprio | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Visualizar tudo | - | ✅ (unidade) | ✅ (depto) | ✅ (todas) | ✅ (atribuídas) | - | ✅ |
+| Exportar histórico | - | ✅ | ✅ | ✅ | ✅ | - | ✅ |
 | **ADMIN** |
-| Gerenciar usuários | - | - | - | - | - | - | - | ✅ |
-| Designar gestores | - | - | - | - | - | - | - | ✅ |
-| Configurar sistema | - | - | - | - | - | - | - | ✅ |
-| Gerar relatórios | - | ✅ (unidade) | ✅ (depto) | ✅ (todas) | - | - | - | ✅ |
-| Auditoria | - | - | - | - | - | - | - | ✅ |
+| Gerenciar usuários | - | - | - | - | - | - | ✅ |
+| Designar gestores | - | - | - | - | - | - | ✅ |
+| Configurar sistema | - | - | - | - | - | - | ✅ |
+| Gerar relatórios | - | ✅ (unidade) | ✅ (depto) | ✅ (todas) | - | - | ✅ |
+| Auditoria | - | - | - | - | - | - | ✅ |
 
 ---
 
@@ -240,7 +234,25 @@ Se gestor está de férias, admin pode designar gestor substituto
 
 ---
 
-## 4. IMPLEMENTAÇÃO TÉCNICA
+## 4. REGRAS DE MULTIPERFIL
+
+Usuários do **departamento STI** podem acumular um segundo (ou terceiro) perfil. As combinações válidas são:
+
+| Perfil Principal | Perfis Secundários Permitidos |
+|---|---|
+| `ANALISTA_STI` | `GESTOR_UNIDADE`, `AVALIADOR_TECNICO` (ambos ou apenas um) |
+| `GESTOR_UNIDADE` | `AVALIADOR_TECNICO`, `RESPONSAVEL_PRODUCAO` (ambos ou apenas um) |
+| `AVALIADOR_TECNICO` | `RESPONSAVEL_PRODUCAO` |
+| demais perfis | — (nenhum perfil secundário) |
+
+**Regras gerais:**
+- Multiperfil é restrito a usuários vinculados ao departamento STI
+- O sistema ativa o contexto do perfil adequado a cada ação realizada (ex.: ao validar como gestor, age como `GESTOR_UNIDADE`)
+- Perfis secundários são armazenados em `tb_usuarios.perfis_secundarios` (JSONB)
+
+---
+
+## 5. IMPLEMENTAÇÃO TÉCNICA
 
 ### 4.1 Middleware de Permissões (Pseudocódigo)
 
@@ -349,10 +361,15 @@ TC-003: Admin pode fazer qualquer coisa
 - Ação: POST /api/v1/demandas/123/validar-gestor
 - Esperado: 200 OK
 
-TC-004: Dev não pode rejeitar demanda
-- Setup: Login como RESPONSAVEL_DESENVOLVIMENTO
-- Ação: POST /api/v1/demandas/123/rejeitar-sti
-- Esperado: 403 Forbidden
+TC-004: Avaliador Técnico não pode agir em demanda que não está em AGUARDANDO_AVALIADOR
+- Setup: Login como AVALIADOR_TECNICO
+- Ação: POST /api/v1/demandas/123/avaliador-devolver-analista (demanda em FILA_STI)
+- Esperado: 409 Conflict + "Demanda não está aguardando decisão do Avaliador Técnico"
+
+TC-005: Avaliador Técnico não pode solicitar ajustes em demanda fora de escopo
+- Setup: Login como AVALIADOR_TECNICO
+- Ação: POST /api/v1/demandas/123/avaliador-solicitar-ajustes (demanda em FILA_STI)
+- Esperado: 409 Conflict
 ```
 
 ---

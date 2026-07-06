@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { notificacaoService } from '../services/api';
 import Layout from '../components/Layout';
 import { Bell, CheckCheck, ExternalLink } from 'lucide-react';
+import Pagination from '../components/Pagination';
 
 export default function NotificacoesPage() {
   const navigate = useNavigate();
@@ -37,9 +38,15 @@ export default function NotificacoesPage() {
 
   useEffect(() => { carregar(); }, [pagina, apenasNaoLidas]);
 
+  const navegarParaDemanda = (notif) => {
+    if (notif.id_demanda) {
+      navigate(`/demanda/${notif.id_demanda}`);
+    }
+  };
+
   const marcarLida = async (notif) => {
     if (notif.lido) {
-      if (notif.link_acao) navigate(new URL(notif.link_acao).pathname);
+      navegarParaDemanda(notif);
       return;
     }
     try {
@@ -47,7 +54,7 @@ export default function NotificacoesPage() {
       setNotificacoes(prev =>
         prev.map(n => n.id_notificacao === notif.id_notificacao ? { ...n, lido: 1 } : n)
       );
-      if (notif.link_acao) navigate(new URL(notif.link_acao).pathname);
+      navegarParaDemanda(notif);
     } catch (err) {
       console.error(err);
     }
@@ -157,25 +164,13 @@ export default function NotificacoesPage() {
           </div>
         )}
 
-        {totalPaginas > 1 && (
-          <div className="flex justify-center gap-2 mt-6">
-            <button
-              onClick={() => setPagina(p => Math.max(1, p - 1))}
-              disabled={pagina === 1}
-              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition"
-            >
-              Anterior
-            </button>
-            <span className="px-3 py-1.5 text-sm text-gray-600">{pagina} / {totalPaginas}</span>
-            <button
-              onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
-              disabled={pagina === totalPaginas}
-              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition"
-            >
-              Próxima
-            </button>
-          </div>
-        )}
+        <Pagination
+          pagina={pagina}
+          totalPaginas={totalPaginas}
+          total={total}
+          contagem={notificacoes.length}
+          onChange={setPagina}
+        />
       </div>
     </Layout>
   );

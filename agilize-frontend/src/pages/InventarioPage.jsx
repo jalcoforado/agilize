@@ -8,6 +8,7 @@ import {
 import { demandaService } from '../services/api';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
+import Pagination from '../components/Pagination';
 
 // ─── Configuração de tipos ────────────────────────────────────────────────────
 
@@ -169,38 +170,6 @@ function LinhaInventario({ demanda, navigate }) {
         <ChevronRight size={14} className="text-neutral-300 group-hover:text-tce-500 transition ml-auto" />
       </td>
     </tr>
-  );
-}
-
-// ─── Paginação ────────────────────────────────────────────────────────────────
-
-function Paginacao({ pagina, totalPaginas, setPagina }) {
-  if (totalPaginas <= 1) return null;
-  const pages = Array.from({ length: Math.min(totalPaginas, 7) }, (_, i) => {
-    if (totalPaginas <= 7) return i + 1;
-    if (pagina <= 4) return i + 1;
-    if (pagina >= totalPaginas - 3) return totalPaginas - 6 + i;
-    return pagina - 3 + i;
-  });
-  return (
-    <div className="flex items-center justify-center gap-1 pt-4 pb-1">
-      <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina === 1}
-        className="px-3 py-1.5 text-sm text-neutral-600 border border-neutral-200 rounded-lg hover:bg-neutral-100 disabled:opacity-30">
-        ‹
-      </button>
-      {pages.map(p => (
-        <button key={p} onClick={() => setPagina(p)}
-          className={`px-3 py-1.5 text-sm rounded-lg border transition ${
-            p === pagina
-              ? 'bg-tce-700 text-white border-tce-700 font-semibold'
-              : 'border-neutral-200 text-neutral-600 hover:bg-neutral-100'
-          }`}>{p}</button>
-      ))}
-      <button onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={pagina === totalPaginas}
-        className="px-3 py-1.5 text-sm text-neutral-600 border border-neutral-200 rounded-lg hover:bg-neutral-100 disabled:opacity-30">
-        ›
-      </button>
-    </div>
   );
 }
 
@@ -404,13 +373,13 @@ export default function InventarioPage() {
               </div>
 
               {/* Rodapé: total + paginação */}
-              <div className="px-4 py-3 border-t border-neutral-100 flex items-center justify-between">
-                <p className="text-xs text-neutral-400">
-                  {listaFiltrada.length} de {total} solução{total !== 1 ? 'ões' : ''}
-                  {temFiltros && ' (filtradas)'}
-                </p>
-                <Paginacao pagina={pagina} totalPaginas={totalPaginas} setPagina={setPagina} />
-              </div>
+              <Pagination
+                pagina={pagina}
+                totalPaginas={totalPaginas}
+                total={total}
+                contagem={listaFiltrada.length}
+                onChange={setPagina}
+              />
             </>
           )}
         </div>

@@ -71,6 +71,25 @@
 .rich-text-content s {
   text-decoration: line-through;
 }
+.rich-text-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 6px 0;
+  display: block;
+}
+
+/* Histórico: thumbnail limitada + cursor de zoom */
+.rich-text-history img {
+  max-height: 180px;
+  max-width: min(100%, 300px);
+  width: auto;
+  cursor: zoom-in;
+  transition: opacity 0.15s;
+}
+.rich-text-history img:hover {
+  opacity: 0.82;
+}
 
 body {
   font-family: 'CG Omega', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;

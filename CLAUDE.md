@@ -55,13 +55,14 @@ agilize-frontend/
 - **Sem Redux ainda** (instalado, não configurado)
 - **PostgreSQL é o padrão da organização** — usar `pg` como cliente Knex, JSONB para diagnósticos IA
 
-## 23 Status do workflow (ver FLUXO.md para diagrama completo)
+## 25 Status do workflow (ver FLUXO.md para diagrama completo)
 
 ### Fase 1 — Solicitação
 ```
 DRAFT → PENDENTE_GESTOR → DEVOLVIDA_AJUSTES → SOLICITANTE_AJUSTANDO → PENDENTE_GESTOR
                         → REJEITADA (terminal)
                         → VALIDADA_GESTOR → FILA_STI
+                                          → AGUARDANDO_DPO (dados sensíveis)
                                           → APROVADA_STI
                                           → REPROVADA_STI (terminal)
                                           → SOLICITADO_AJUSTES_STI → SOLICITANTE_AJUSTANDO
@@ -76,6 +77,7 @@ APROVADA_STI → EM_DESENVOLVIMENTO → SUBMETIDO_HOMOLOGACAO
 ```
 SUBMETIDO_HOMOLOGACAO → PENDENTE_HOMOLOGACAO_GESTOR → DEVOLVIDA_HOMOLOGACAO → AJUSTANDO_HOMOLOGACAO
                                                      → VALIDADA_HOMOLOGACAO_GESTOR → FILA_HOMOLOGACAO_STI
+                                                                                    → AGUARDANDO_DPO_HOMOLOGACAO (dados sensíveis)
                                                                                     → HOMOLOGADA
                                                                                     → SOLICITADO_AJUSTES_HOMOLOGACAO → AJUSTANDO_HOMOLOGACAO
 ```
@@ -89,13 +91,15 @@ HOMOLOGADA → EM_PRODUCAO → EM_MONITORAMENTO → DESATIVADA (terminal)
 CANCELADA (disponível até SUBMETIDO_HOMOLOGACAO)
 ```
 
-## 6 Perfis
+## 8 Perfis
 | Perfil | O que faz |
 |--------|-----------|
 | SOLICITANTE | Cria demanda e desenvolve a solução |
 | GESTOR_UNIDADE | Valida solicitação e homologação |
 | GESTOR_DEPARTAMENTO | Supervisiona |
-| ANALISTA_STI | Governança — analisa viabilidade e homologa (com apoio IA) |
+| ANALISTA_STI | Governança — analisa viabilidade e homologa (com apoio IA); pode encaminhar ao Avaliador Técnico |
+| AVALIADOR_TECNICO | Revisão superior — recebe encaminhamentos do Analista, devolve ao analista ou solicita ajustes |
+| DPO | Análise LGPD para dados sensíveis (Fases 1 e 3) |
 | RESPONSAVEL_PRODUCAO | Ops STI — executa deploy |
 | GESTOR_SISTEMA | Admin total |
 
@@ -103,13 +107,18 @@ CANCELADA (disponível até SUBMETIDO_HOMOLOGACAO)
 > O Solicitante desenvolve. A STI Governança homologa.
 
 ## Usuários de teste (seed)
-| Email | Senha | Perfil |
-|-------|-------|--------|
-| jorge@agilize.com.br | senha123 | Solicitante |
-| maria@agilize.com.br | senha123 | Gestor Unidade |
-| joao@agilize.com.br | senha123 | Analista STI |
-| carlos@agilize.com.br | senha123 | Ops STI |
-| admin@agilize.com.br | senha123 | Admin |
+| Email | Senha | Perfil | Unidade |
+|-------|-------|--------|---------|
+| jorge@agilize.com.br | senha123 | Solicitante | RH / Recrutamento e Seleção |
+| pedro@agilize.com.br | senha123 | Solicitante | PROC / Processos Jurídicos |
+| ana@agilize.com.br | senha123 | Solicitante | FIN / Contabilidade |
+| rafael@agilize.com.br | senha123 | Solicitante | STI / Governança TI |
+| maria@agilize.com.br | senha123 | Gestor Unidade | RH (gestora da unidade RH) |
+| fernanda@agilize.com.br | senha123 | Gestor Unidade | PROC (gestora da unidade PROC) |
+| luciana@agilize.com.br | senha123 | Gestor Unidade | FIN (gestora da unidade FIN) |
+| joao@agilize.com.br | senha123 | Analista STI | STI |
+| carlos@agilize.com.br | senha123 | Ops STI | STI |
+| admin@agilize.com.br | senha123 | Admin | — |
 
 ## Identidade Visual TCE-CE
 - Azul institucional: **#194383** (extraído do SVG oficial)

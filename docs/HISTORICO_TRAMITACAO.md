@@ -20,9 +20,8 @@ CREATE TABLE tb_historico_decisoes (
     
     -- Perfil e Permissões
     perfil_usuario VARCHAR(100) NOT NULL,
-    -- Valores: SOLICITANTE, GESTOR_UNIDADE, GESTOR_DEPARTAMENTO, 
-    --         ANALISTA_STI, RESPONSAVEL_DESENVOLVIMENTO, 
-    --         RESPONSAVEL_HOMOLOGACAO, RESPONSAVEL_PRODUCAO, GESTOR_SISTEMA
+    -- Valores: SOLICITANTE, GESTOR_UNIDADE, GESTOR_DEPARTAMENTO,
+    --         ANALISTA_STI, AVALIADOR_TECNICO, RESPONSAVEL_PRODUCAO, GESTOR_SISTEMA
     
     -- Transição de Status
     status_anterior VARCHAR(50),
@@ -106,18 +105,22 @@ CREATE TABLE tb_historico_decisoes (
         status_novo IN (
             'DRAFT', 'PENDENTE_GESTOR', 'DEVOLVIDA_AJUSTES',
             'SOLICITANTE_AJUSTANDO', 'VALIDADA_GESTOR', 'FILA_STI',
-            'APROVADA_STI', 'REPROVADA_STI', 'SOLICITADO_AJUSTES_STI',
-            'EM_DESENVOLVIMENTO', 'EM_HOMOLOGACAO', 'EM_PRODUCAO',
-            'FINALIZADA', 'CANCELADA'
+            'AGUARDANDO_AVALIADOR', 'APROVADA_STI', 'REPROVADA_STI',
+            'SOLICITADO_AJUSTES_STI', 'EM_DESENVOLVIMENTO',
+            'SUBMETIDO_HOMOLOGACAO', 'PENDENTE_HOMOLOGACAO_GESTOR',
+            'DEVOLVIDA_HOMOLOGACAO', 'AJUSTANDO_HOMOLOGACAO',
+            'VALIDADA_HOMOLOGACAO_GESTOR', 'FILA_HOMOLOGACAO_STI',
+            'AGUARDANDO_AVALIADOR_HOMOLOGACAO', 'SOLICITADO_AJUSTES_HOMOLOGACAO',
+            'HOMOLOGADA', 'EM_PRODUCAO', 'EM_MONITORAMENTO',
+            'DESATIVADA', 'REJEITADA', 'CANCELADA'
         )
     ),
     
     CONSTRAINT chk_perfil_valido CHECK (
         perfil_usuario IN (
             'SOLICITANTE', 'GESTOR_UNIDADE', 'GESTOR_DEPARTAMENTO',
-            'ANALISTA_STI', 'RESPONSAVEL_DESENVOLVIMENTO',
-            'RESPONSAVEL_HOMOLOGACAO', 'RESPONSAVEL_PRODUCAO',
-            'GESTOR_SISTEMA'
+            'ANALISTA_STI', 'AVALIADOR_TECNICO',
+            'RESPONSAVEL_PRODUCAO', 'GESTOR_SISTEMA'
         )
     )
 );
@@ -275,11 +278,9 @@ END;
 │                                                                 │
 │ ┌─ 23/04/2026 15:00 (Quarta-feira) ────────────────────────┐  │
 │ │ 🔧 EM DESENVOLVIMENTO                                   │  │
-│ │ Usuário: Pedro Costa (RESPONSAVEL_DESENVOLVIMENTO)      │  │
+│ │ Usuário: Jorge Alcoforado (SOLICITANTE)                 │  │
 │ │ Status: APROVADA_STI → EM_DESENVOLVIMENTO              │  │
 │ │ Ação: INICIAR_DEV                                       │  │
-│ │ Responsável: Pedro Costa                                │  │
-│ │ Data Prevista Conclusão: 05/05/2026                     │  │
 │ │ Duração da etapa: 1 dia (atual)                         │  │
 │ │ [Ver documento de design] [Timeline de desenvolvimento] │  │
 │ └─────────────────────────────────────────────────────────┘   │
@@ -353,10 +354,11 @@ Filtro por Unidade:
 Filtro por Perfil:
 ☐ SOLICITANTE
 ☐ GESTOR_UNIDADE
+☐ GESTOR_DEPARTAMENTO
 ☐ ANALISTA_STI
-☐ RESPONSAVEL_DESENVOLVIMENTO
-☐ RESPONSAVEL_HOMOLOGACAO
-☐ Etc...
+☐ AVALIADOR_TECNICO
+☐ RESPONSAVEL_PRODUCAO
+☐ GESTOR_SISTEMA
 ```
 
 ### 3.2 Consultas SQL de Filtro

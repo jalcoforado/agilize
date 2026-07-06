@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{titulo}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+          <!-- Cabeçalho -->
+          <tr>
+            <td style="background-color:#194383;border-radius:8px 8px 0 0;padding:24px 32px;">
+              <p style="margin:0;color:#ffffff;font-size:12px;letter-spacing:1px;text-transform:uppercase;">
+                Tribunal de Contas do Estado do Ceará
+              </p>
+              <h1 style="margin:4px 0 0;color:#ffffff;font-size:20px;font-weight:700;">
+                Agilize — Gestão de Demandas
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Corpo -->
+          <tr>
+            <td style="background-color:#ffffff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:32px;">
+              <h2 style="margin:0 0 16px;color:#1e293b;font-size:18px;">{{titulo}}</h2>
+
+              <table cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+                <tr>
+                  <td style="padding:4px 0;">
+                    <span style="color:#64748b;font-size:14px;">Demanda:&nbsp;</span>
+                    <strong style="color:#1e293b;font-size:14px;">{{numeroDemanda}}</strong>
+                  </td>
+                </tr>
+                {{#if statusAnterior}}
+                <tr>
+                  <td style="padding:4px 0;">
+                    <span style="color:#64748b;font-size:14px;">Status:&nbsp;</span>
+                    <strong style="color:#64748b;font-size:14px;">{{statusAnterior}}</strong>
+                    <span style="color:#64748b;font-size:14px;">&nbsp;→&nbsp;</span>
+                    <strong style="color:#194383;font-size:14px;">{{statusNovo}}</strong>
+                  </td>
+                </tr>
+                {{/if}}
+              </table>
+
+              <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.6;">{{mensagem}}</p>
+
+              <a href="{{linkAcao}}"
+                 style="display:inline-block;background-color:#194383;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">
+                Ver Demanda
+              </a>
+            </td>
+          </tr>
+
+          <!-- Rodapé -->
+          <tr>
+            <td style="padding:20px 0;text-align:center;">
+              <p style="margin:0;color:#94a3b8;font-size:12px;">
+                Agilize 2.0 — Sistema de Governança de Soluções Setoriais de TI (N-PSI-016)
+              </p>
+              <p style="margin:4px 0 0;color:#94a3b8;font-size:12px;">
+                Este é um e-mail automático. Não responda a esta mensagem.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

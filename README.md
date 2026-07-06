@@ -166,14 +166,12 @@ Implementar um novo fluxo obrigatório de demandas onde:
 
 ## 🔑 CONCEITOS PRINCIPAIS
 
-### Novo Fluxo Obrigatório
+### Fluxo Obrigatório
 ```
-SOLICITANTE → GESTOR_UNIDADE → STI → DEV → QA → OPS → ✅
-              ↓ (pode rejeitar)
-              ❌ (status: REJEITADA)
-              
-              ↓ (pode devolver)
-              🔄 (status: DEVOLVIDA_AJUSTES)
+SOLICITANTE → GESTOR_UNIDADE → ANALISTA_STI → (AVALIADOR_TECNICO) → [aprovado] → SOLICITANTE (desenvolve) → GESTOR_UNIDADE → ANALISTA_STI → OPS → Produção
+              ↓ (pode rejeitar)                ↓ (pode encaminhar)
+              ❌ (REJEITADA)                   AGUARDANDO_AVALIADOR
+                                               ↓ devolver ao analista ou solicitar ajustes
 ```
 
 ### 14 Status do Workflow
@@ -194,15 +192,14 @@ SOLICITANTE → GESTOR_UNIDADE → STI → DEV → QA → OPS → ✅
 | FINALIZADA | ✅ Concluída |
 | CANCELADA | ❌ Cancelada |
 
-### 8 Perfis do Sistema
-1. SOLICITANTE - Cria demanda
-2. GESTOR_UNIDADE - Valida
+### 7 Perfis do Sistema
+1. SOLICITANTE - Cria demanda e desenvolve a solução
+2. GESTOR_UNIDADE - Valida solicitação e produto
 3. GESTOR_DEPARTAMENTO - Supervisiona
-4. ANALISTA_STI - Aprova para desenvolvimento
-5. RESPONSAVEL_DESENVOLVIMENTO - Desenvolve
-6. RESPONSAVEL_HOMOLOGACAO - Testa
-7. RESPONSAVEL_PRODUCAO - Deploy
-8. GESTOR_SISTEMA - Admin tudo
+4. ANALISTA_STI - Analisa viabilidade e homologa; pode encaminhar ao Avaliador Técnico
+5. AVALIADOR_TECNICO - Revisão superior; recebe encaminhamentos do Analista, pode devolver ou solicitar ajustes
+6. RESPONSAVEL_PRODUCAO - Deploy
+7. GESTOR_SISTEMA - Admin tudo
 
 ### Regra Central (N-PSI-016)
 ✅ **SOLICITANTE COMUM NÃO PODE encaminhar diretamente para STI**

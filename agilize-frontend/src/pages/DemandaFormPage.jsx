@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, BarChart2, Terminal, Cpu, Globe, Package, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, BarChart2, Terminal, Cpu, Globe, Package, AlertCircle, Loader2, Paperclip, FileText, File, X, AlertTriangle } from 'lucide-react';
 import { demandaService, adminService } from '../services/api';
+
+function parseJwt(token) {
+  try { return JSON.parse(atob(token.split('.')[1])); } catch { return {}; }
+}
 import Layout from '../components/Layout';
 
 // ─── Configuração dos tipos ────────────────────────────────────────────────
@@ -34,18 +38,18 @@ const TIPOS_SOLUCAO = [
 ];
 
 const PRIORIDADES = [
-  { value: 'BAIXA',   label: 'Baixa',    cls: 'bg-green-100  text-green-700'  },
-  { value: 'MEDIA',   label: 'Média',    cls: 'bg-yellow-100 text-yellow-700' },
-  { value: 'ALTA',    label: 'Alta',     cls: 'bg-orange-100 text-orange-700' },
-  { value: 'CRITICA', label: 'Crítica',  cls: 'bg-red-100    text-red-700'    },
+  { value: 'BAIXA', label: 'Baixa', cls: 'bg-green-100  text-green-700' },
+  { value: 'MEDIA', label: 'Média', cls: 'bg-yellow-100 text-yellow-700' },
+  { value: 'ALTA', label: 'Alta', cls: 'bg-orange-100 text-orange-700' },
+  { value: 'CRITICA', label: 'Crítica', cls: 'bg-red-100    text-red-700' },
 ];
 
 const FREQUENCIAS = [
   { value: 'CONTINUO', label: 'Contínuo (24/7 — executa sempre)' },
-  { value: 'DIARIO',   label: 'Diário' },
-  { value: 'SEMANAL',  label: 'Semanal' },
-  { value: 'MENSAL',   label: 'Mensal' },
-  { value: 'PONTUAL',  label: 'Pontual (uso único ou muito esporádico)' },
+  { value: 'DIARIO', label: 'Diário' },
+  { value: 'SEMANAL', label: 'Semanal' },
+  { value: 'MENSAL', label: 'Mensal' },
+  { value: 'PONTUAL', label: 'Pontual (uso único ou muito esporádico)' },
 ];
 
 const ESTADO_VAZIO = {
@@ -73,6 +77,12 @@ const ESTADO_VAZIO = {
   tec_autenticacao: false, tec_tipo_auth: '',
   tec_expoe_api: false,
   tec_descricao_tech: '',
+  solucao_em_uso: false,
+  dados_sensiveis: false,
+  dados_sensiveis_desc: '',
+  impacta_outras_areas: false,
+  areas_impactadas: '',
+  usa_ia_desenvolvimento: false,
 };
 
 // Converte dados da API de volta para o estado do formulário
@@ -149,6 +159,12 @@ function apiParaForm(demanda) {
     dep_apis: deps.apis_externas || '',
     dep_sistemas: deps.sistemas_integrados || '',
     dep_outras: deps.outras || '',
+    solucao_em_uso: !!demanda.solucao_em_uso,
+    dados_sensiveis: !!demanda.dados_sensiveis,
+    dados_sensiveis_desc: demanda.dados_sensiveis_desc || '',
+    impacta_outras_areas: !!demanda.impacta_outras_areas,
+    areas_impactadas: demanda.areas_impactadas || '',
+    usa_ia_desenvolvimento: !!demanda.usa_ia_desenvolvimento,
     ...tecFlat,
   };
 }
@@ -174,7 +190,7 @@ function Campo({ label, obrigatorio, children, erro, hint }) {
       </label>
       {children}
       {hint && !erro && <p className="mt-1 text-[11px] text-neutral-400">{hint}</p>}
-      {erro && <p className="mt-1 text-[11px] text-red-600 flex items-center gap-1"><AlertCircle size={11}/>{erro}</p>}
+      {erro && <p className="mt-1 text-[11px] text-red-600 flex items-center gap-1"><AlertCircle size={11} />{erro}</p>}
     </div>
   );
 }
@@ -193,9 +209,8 @@ function Chk({ checked, onChange, label, children }) {
 }
 
 function ic(erro) {
-  return `w-full px-3.5 py-2.5 border rounded-lg text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-tce-500 focus:border-tce-500 transition ${
-    erro ? 'border-red-400 bg-red-50' : 'border-neutral-300'
-  }`;
+  return `w-full px-3.5 py-2.5 border rounded-lg text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-tce-500 focus:border-tce-500 transition ${erro ? 'border-red-400 bg-red-50' : 'border-neutral-300'
+    }`;
 }
 
 // ─── Configuração técnica por tipo ─────────────────────────────────────────
@@ -212,7 +227,7 @@ function TecnicoBI({ f, set, erros }) {
         <Campo label="Frequência de atualização dos dados">
           <select className={ic()} value={f.tec_freq_atualizacao} onChange={e => set('tec_freq_atualizacao', e.target.value)}>
             <option value="">Selecione...</option>
-            {[['TEMPO_REAL','Tempo real'],['HORARIA','Horária'],['DIARIA','Diária'],['SEMANAL','Semanal'],['MANUAL','Manual/sob demanda']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+            {[['TEMPO_REAL', 'Tempo real'], ['HORARIA', 'Horária'], ['DIARIA', 'Diária'], ['SEMANAL', 'Semanal'], ['MANUAL', 'Manual/sob demanda']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </Campo>
       </div>
@@ -386,12 +401,12 @@ function TecnicoOutro({ f, set, erros }) {
 }
 
 function ProgressoForm({ f }) {
-  const tecConcluida = f.tipo_solucao === 'PAINEL_BI'      ? !!(f.tec_ferramenta_bi && f.tec_fontes_dados)
-                     : f.tipo_solucao === 'SCRIPT'          ? !!(f.tec_linguagem && f.tec_execucao && f.tec_escopo)
-                     : f.tipo_solucao === 'AGENTE_IA'       ? !!f.tec_provedor_llm
-                     : f.tipo_solucao === 'SISTEMA_SIMPLES' ? !!f.tec_tipo_interface
-                     : f.tipo_solucao === 'OUTRO'           ? f.tec_descricao_tech?.length >= 20
-                     : false;
+  const tecConcluida = f.tipo_solucao === 'PAINEL_BI' ? !!(f.tec_ferramenta_bi && f.tec_fontes_dados)
+    : f.tipo_solucao === 'SCRIPT' ? !!(f.tec_linguagem && f.tec_execucao && f.tec_escopo)
+      : f.tipo_solucao === 'AGENTE_IA' ? !!f.tec_provedor_llm
+        : f.tipo_solucao === 'SISTEMA_SIMPLES' ? !!f.tec_tipo_interface
+          : f.tipo_solucao === 'OUTRO' ? f.tec_descricao_tech?.length >= 20
+            : false;
 
   const passos = [
     { label: 'Tipo', ok: !!f.tipo_solucao },
@@ -407,9 +422,8 @@ function ProgressoForm({ f }) {
         {passos.map((passo, i) => (
           <React.Fragment key={passo.label}>
             <div className="flex items-center gap-1.5 shrink-0">
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                passo.ok ? 'bg-tce-700 text-white' : 'bg-neutral-200 text-neutral-500'
-              }`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${passo.ok ? 'bg-tce-700 text-white' : 'bg-neutral-200 text-neutral-500'
+                }`}>
                 {passo.ok ? '✓' : i + 1}
               </div>
               <span className={`text-xs font-medium ${passo.ok ? 'text-tce-700' : 'text-neutral-400'}`}>
@@ -427,6 +441,112 @@ function ProgressoForm({ f }) {
   );
 }
 
+// ─── Upload de anexos da solicitação ──────────────────────────────────────────
+const MAX_ANEXOS_FORM = 3;
+const MAX_MB_FORM = 5;
+const EXT_CORES = {
+  pdf: 'text-red-500 bg-red-50 border-red-200', doc: 'text-blue-600 bg-blue-50 border-blue-200',
+  docx: 'text-blue-600 bg-blue-50 border-blue-200', xls: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+  xlsx: 'text-emerald-600 bg-emerald-50 border-emerald-200', ppt: 'text-orange-500 bg-orange-50 border-orange-200',
+  pptx: 'text-orange-500 bg-orange-50 border-orange-200', txt: 'text-neutral-500 bg-neutral-100 border-neutral-200',
+  csv: 'text-teal-600 bg-teal-50 border-teal-200', png: 'text-violet-500 bg-violet-50 border-violet-200',
+  jpg: 'text-violet-500 bg-violet-50 border-violet-200', jpeg: 'text-violet-500 bg-violet-50 border-violet-200',
+};
+function extLabel(nome) { return nome.split('.').pop()?.toUpperCase() || 'ARQ'; }
+function extCor(nome) { return EXT_CORES[nome.split('.').pop()?.toLowerCase()] || 'text-neutral-400 bg-neutral-50 border-neutral-200'; }
+function fmtMB(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1_048_576).toFixed(1)} MB`;
+}
+function IconeExt({ nome }) {
+  const ext = nome.split('.').pop()?.toLowerCase();
+  const Ic = ['pdf', 'doc', 'docx', 'txt', 'ppt', 'pptx', 'csv'].includes(ext) ? FileText : File;
+  return <Ic size={14} className={extCor(nome).split(' ')[0]} />;
+}
+function AnexosSolicitacao({ existentes, novos, onNovos, erroAnexo, setErroAnexo }) {
+  const fileRef = useRef(null);
+  const total = existentes.length + novos.length;
+  const vagos = MAX_ANEXOS_FORM - total;
+  const pode = vagos > 0;
+
+  const onSelect = (e) => {
+    const selecionados = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!selecionados.length) return;
+    const candidatos = selecionados.slice(0, vagos);
+    let erro = '';
+    const validos = [];
+    for (const f of candidatos) {
+      if (f.size > MAX_MB_FORM * 1_048_576) { erro = `"${f.name}" excede ${MAX_MB_FORM} MB e foi ignorado.`; }
+      else if (novos.some(a => a.name === f.name && a.size === f.size)) { erro = `"${f.name}" já está anexado.`; }
+      else { validos.push(f); }
+    }
+    setErroAnexo(erro);
+    if (validos.length) onNovos([...novos, ...validos]);
+  };
+
+  const removerNovo = (idx) => { onNovos(novos.filter((_, i) => i !== idx)); setErroAnexo(''); };
+
+  return (
+    <Secao titulo="Documentos da solicitação" sub={`Opcional · máx. ${MAX_ANEXOS_FORM} arquivos · ${MAX_MB_FORM} MB cada — PDF, Word, Excel, imagens...`}>
+      <input ref={fileRef} type="file" multiple
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,image/*"
+        className="hidden" onChange={onSelect} />
+
+      {/* Arquivos já salvos no banco (modo edição) */}
+      {existentes.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {existentes.map((a, i) => (
+            <div key={i} className="flex items-center gap-2.5 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
+              <IconeExt nome={a.nome} />
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wide ${extCor(a.nome)}`}>{extLabel(a.nome)}</span>
+              <p className="flex-1 text-xs font-medium text-neutral-600 truncate min-w-0">{a.nome}</p>
+              <p className="text-[11px] text-neutral-400 shrink-0 tabular-nums">{fmtMB(a.tamanho)}</p>
+              <span className="text-[10px] text-neutral-400 italic shrink-0">salvo</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Arquivos novos selecionados */}
+      {novos.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {novos.map((f, i) => (
+            <div key={i} className="flex items-center gap-2.5 bg-white border border-neutral-200 rounded-lg px-3 py-2 group">
+              <IconeExt nome={f.name} />
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wide ${extCor(f.name)}`}>{extLabel(f.name)}</span>
+              <p className="flex-1 text-xs font-medium text-neutral-700 truncate min-w-0">{f.name}</p>
+              <p className="text-[11px] text-neutral-400 shrink-0 tabular-nums">{fmtMB(f.size)}</p>
+              <button type="button" onClick={() => removerNovo(i)}
+                className="text-neutral-300 hover:text-red-500 transition shrink-0 opacity-0 group-hover:opacity-100">
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Botão de adição */}
+      {pode && (
+        <button type="button" onClick={() => fileRef.current?.click()}
+          className="w-full border border-dashed border-neutral-300 hover:border-tce-400 hover:bg-tce-50 rounded-lg px-4 py-3 flex items-center justify-center gap-2 text-xs text-neutral-400 hover:text-tce-600 transition">
+          <Paperclip size={13} />
+          {total === 0 ? 'Clique para anexar documentos' : `Adicionar mais (${vagos} vaga${vagos !== 1 ? 's' : ''} restante${vagos !== 1 ? 's' : ''})`}
+        </button>
+      )}
+      {total === MAX_ANEXOS_FORM && (
+        <p className="text-[11px] text-neutral-400 mt-1">Limite de {MAX_ANEXOS_FORM} documentos atingido.</p>
+      )}
+      {erroAnexo && (
+        <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1.5">
+          <AlertTriangle size={11} className="shrink-0" />{erroAnexo}
+        </p>
+      )}
+    </Secao>
+  );
+}
+
 // ─── Página principal ──────────────────────────────────────────────────────
 export default function DemandaFormPage() {
   const navigate = useNavigate();
@@ -437,26 +557,42 @@ export default function DemandaFormPage() {
   const [salvando, setSalvando] = useState(false);
   const [erroGeral, setErroGeral] = useState('');
   const [erros, setErros] = useState({});
+  const [arquivosNovos, setArquivosNovos] = useState([]);
+  const [arquivosExistentes, setArquivosExistentes] = useState([]);
+  const [erroAnexo, setErroAnexo] = useState('');
 
-  const [f, setF] = useState(ESTADO_VAZIO);
-  const [unidades, setUnidades] = useState([]);
-  const [departamentos, setDepartamentos] = useState([]);
+  const jwt = parseJwt(localStorage.getItem('token') || '');
+  const idUnidadeUsuario = jwt.id_unidade != null ? String(jwt.id_unidade) : '';
+  const idDepartamentoUsuario = jwt.id_departamento != null ? String(jwt.id_departamento) : '';
+
+  const [f, setF] = useState({
+    ...ESTADO_VAZIO,
+    id_unidade: idUnidadeUsuario,
+    id_departamento: idDepartamentoUsuario,
+  });
+  const [nomeUnidade, setNomeUnidade] = useState('');
+  const [siglaUnidade, setSiglaUnidade] = useState('');
+  const [nomeDepartamento, setNomeDepartamento] = useState('');
 
   useEffect(() => {
+    if (!idUnidadeUsuario) return;
     adminService.listarUnidades()
-      .then(r => setUnidades(r.data.unidades))
+      .then(r => {
+        const u = r.data.unidades.find(u => String(u.id_unidade) === idUnidadeUsuario);
+        if (u) { setNomeUnidade(u.nome_unidade); setSiglaUnidade(u.sigla); }
+      })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (f.id_unidade) {
-      adminService.listarDepartamentos(f.id_unidade)
-        .then(r => setDepartamentos(r.data.departamentos))
-        .catch(() => setDepartamentos([]));
-    } else {
-      setDepartamentos([]);
-    }
-  }, [f.id_unidade]);
+    if (!idUnidadeUsuario || !idDepartamentoUsuario) return;
+    adminService.listarDepartamentos()
+      .then(r => {
+        const d = r.data.departamentos.find(d => String(d.id_departamento) === idDepartamentoUsuario);
+        if (d) setNomeDepartamento(d.nome_departamento);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!modoEdicao) return;
@@ -468,6 +604,9 @@ export default function DemandaFormPage() {
           return;
         }
         setF(apiParaForm(demanda));
+        if (Array.isArray(demanda.anexos) && demanda.anexos.length) {
+          setArquivosExistentes(demanda.anexos);
+        }
       })
       .catch(() => setErroGeral('Erro ao carregar os dados da solicitação.'))
       .finally(() => setCarregando(false));
@@ -494,32 +633,40 @@ export default function DemandaFormPage() {
     let tec = {};
     switch (f.tipo_solucao) {
       case 'PAINEL_BI':
-        tec = { ferramenta_bi: f.tec_ferramenta_bi, fontes_dados: f.tec_fontes_dados,
+        tec = {
+          ferramenta_bi: f.tec_ferramenta_bi, fontes_dados: f.tec_fontes_dados,
           frequencia_atualizacao: f.tec_freq_atualizacao, conexao_direta: f.tec_conexao_direta,
-          ...(f.tec_conexao_direta && { banco_bi: f.tec_banco_bi }) };
+          ...(f.tec_conexao_direta && { banco_bi: f.tec_banco_bi })
+        };
         break;
       case 'SCRIPT':
-        tec = { linguagem: f.tec_linguagem, execucao: f.tec_execucao,
+        tec = {
+          linguagem: f.tec_linguagem, execucao: f.tec_execucao,
           escopo: f.tec_escopo,
-          ...(f.tec_execucao === 'AGENDADO' && { agendamento: f.tec_agendamento }) };
+          ...(f.tec_execucao === 'AGENDADO' && { agendamento: f.tec_agendamento })
+        };
         break;
       case 'AGENTE_IA':
-        tec = { provedor_llm: f.tec_provedor_llm, modelo_llm: f.tec_modelo_llm,
+        tec = {
+          provedor_llm: f.tec_provedor_llm, modelo_llm: f.tec_modelo_llm,
           estimativa_tokens_mes: f.tec_tokens_mes ? parseInt(f.tec_tokens_mes) : null,
           custo_llm_mes_estimado: f.tec_custo_llm_mes ? parseFloat(f.tec_custo_llm_mes) : null,
           usa_rag: f.tec_usa_rag, ...(f.tec_usa_rag && { fontes_rag: f.tec_fontes_rag }),
           acoes_autonomas: f.tec_acoes_autonomas,
           ...(f.tec_acoes_autonomas && { descricao_acoes: f.tec_desc_acoes }),
-          tem_memoria_persistente: f.tec_memoria, usa_git: f.tec_usa_git };
+          tem_memoria_persistente: f.tec_memoria, usa_git: f.tec_usa_git
+        };
         break;
       case 'SISTEMA_SIMPLES':
-        tec = { tipo_interface: f.tec_tipo_interface, tecnologia: f.tec_tecnologia,
+        tec = {
+          tipo_interface: f.tec_tipo_interface, tecnologia: f.tec_tecnologia,
           banco_dados: f.tec_banco_sistema,
           usuarios_simultaneos: f.tec_usuarios_simult ? parseInt(f.tec_usuarios_simult) : null,
           requer_servidor_dedicado: f.tec_servidor_dedicado,
           tem_autenticacao: f.tec_autenticacao,
           ...(f.tec_autenticacao && { tipo_autenticacao: f.tec_tipo_auth }),
-          expoe_api: f.tec_expoe_api };
+          expoe_api: f.tec_expoe_api
+        };
         break;
       case 'OUTRO':
         tec = { descricao_tecnologia: f.tec_descricao_tech };
@@ -538,6 +685,12 @@ export default function DemandaFormPage() {
       investimento_estimado: f.investimento_estimado ? parseFloat(f.investimento_estimado) : undefined,
       dependencias_externas: deps,
       dados_tecnicos: tec,
+      solucao_em_uso: f.solucao_em_uso,
+      dados_sensiveis: f.dados_sensiveis,
+      dados_sensiveis_desc: f.dados_sensiveis && f.dados_sensiveis_desc ? f.dados_sensiveis_desc : undefined,
+      impacta_outras_areas: f.impacta_outras_areas,
+      areas_impactadas: f.impacta_outras_areas && f.areas_impactadas ? f.areas_impactadas : undefined,
+      usa_ia_desenvolvimento: f.tipo_solucao !== 'AGENTE_IA' ? f.usa_ia_desenvolvimento : undefined,
     };
   };
 
@@ -546,8 +699,8 @@ export default function DemandaFormPage() {
     if (!f.tipo_solucao) e.tipo_solucao = 'Selecione o tipo de solução';
     if (!f.titulo || f.titulo.length < 10) e.titulo = 'Mínimo 10 caracteres';
     if (!f.prioridade) e.prioridade = 'Selecione a prioridade';
-    if (!f.id_unidade) e.id_unidade = 'Informe a unidade';
-    if (!f.id_departamento) e.id_departamento = 'Informe o departamento';
+    if (!f.id_unidade) e.id_unidade = 'Seu usuário não está vinculado a uma unidade. Contate o administrador.';
+    if (!f.id_departamento) e.id_departamento = 'Seu usuário não está vinculado a um departamento. Contate o administrador.';
     if (!f.descricao || f.descricao.length < 50) e.descricao = 'Mínimo 50 caracteres';
     if (!f.objetivo_principal || f.objetivo_principal.length < 30) e.objetivo_principal = 'Mínimo 30 caracteres';
     if (!f.publico_alvo || f.publico_alvo.length < 10) e.publico_alvo = 'Mínimo 10 caracteres';
@@ -580,11 +733,21 @@ export default function DemandaFormPage() {
     if (!validar()) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setSalvando(true); setErroGeral('');
     try {
+      const novosBase64 = arquivosNovos.length
+        ? await Promise.all(arquivosNovos.map(f => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ nome: f.name, tamanho: f.size, tipo: f.type, conteudo: reader.result });
+            reader.onerror = reject;
+            reader.readAsDataURL(f);
+          })))
+        : [];
+      const todosAnexos = [...arquivosExistentes, ...novosBase64];
+      const payload = { ...buildPayload(), ...(todosAnexos.length ? { anexos: todosAnexos } : {}) };
       if (modoEdicao) {
-        await demandaService.atualizar(id, buildPayload());
+        await demandaService.atualizar(id, payload);
         navigate(`/demanda/${id}`);
       } else {
-        const { data } = await demandaService.criar(buildPayload());
+        const { data } = await demandaService.criar(payload);
         navigate(`/demanda/${data.demanda.id_demanda}`);
       }
     } catch (err) {
@@ -663,7 +826,7 @@ export default function DemandaFormPage() {
             </div>
             {erros.tipo_solucao && (
               <p className="px-6 pb-4 text-[11px] text-red-600 flex items-center gap-1">
-                <AlertCircle size={11}/>{erros.tipo_solucao}
+                <AlertCircle size={11} />{erros.tipo_solucao}
               </p>
             )}
           </div>
@@ -687,22 +850,16 @@ export default function DemandaFormPage() {
                   </select>
                 </Campo>
                 <Campo label="Unidade" obrigatorio erro={erros.id_unidade}>
-                  <select className={ic(erros.id_unidade)} value={f.id_unidade}
-                    onChange={e => { set('id_unidade', e.target.value); set('id_departamento', ''); }}>
-                    <option value="">Selecione a unidade...</option>
-                    {unidades.map(u => (
-                      <option key={u.id_unidade} value={u.id_unidade}>{u.sigla} — {u.nome_unidade}</option>
-                    ))}
-                  </select>
+                  <div className={`${ic(erros.id_unidade || !idUnidadeUsuario)} cursor-default ${(erros.id_unidade || !idUnidadeUsuario) ? 'text-red-600' : 'bg-neutral-50 text-neutral-500'}`}>
+                    {siglaUnidade && nomeUnidade
+                      ? `${siglaUnidade} — ${nomeUnidade}`
+                      : nomeUnidade || (idUnidadeUsuario ? 'Carregando...' : 'Não vinculado')}
+                  </div>
                 </Campo>
                 <Campo label="Departamento" obrigatorio erro={erros.id_departamento}>
-                  <select className={ic(erros.id_departamento)} value={f.id_departamento}
-                    onChange={e => set('id_departamento', e.target.value)} disabled={!f.id_unidade}>
-                    <option value="">Selecione o departamento...</option>
-                    {departamentos.map(d => (
-                      <option key={d.id_departamento} value={d.id_departamento}>{d.nome_departamento}</option>
-                    ))}
-                  </select>
+                  <div className={`${ic(erros.id_departamento || !idDepartamentoUsuario)} cursor-default ${(erros.id_departamento || !idDepartamentoUsuario) ? 'text-red-600' : 'bg-neutral-50 text-neutral-500'}`}>
+                    {nomeDepartamento || (idDepartamentoUsuario ? 'Carregando...' : 'Não vinculado')}
+                  </div>
                 </Campo>
               </div>
             </Secao>
@@ -751,13 +908,66 @@ export default function DemandaFormPage() {
             </Secao>
 
             {/* ── 4. Configuração técnica (dinâmica) ── */}
-            {f.tipo_solucao === 'PAINEL_BI'       && <TecnicoBI f={f} set={set} erros={erros} />}
-            {f.tipo_solucao === 'SCRIPT'           && <TecnicoScript f={f} set={set} erros={erros} />}
-            {f.tipo_solucao === 'AGENTE_IA'        && <TecnicoAgenteIA f={f} set={set} erros={erros} />}
-            {f.tipo_solucao === 'SISTEMA_SIMPLES'  && <TecnicoSistema f={f} set={set} erros={erros} />}
-            {f.tipo_solucao === 'OUTRO'            && <TecnicoOutro f={f} set={set} erros={erros} />}
+            {f.tipo_solucao === 'PAINEL_BI' && <TecnicoBI f={f} set={set} erros={erros} />}
+            {f.tipo_solucao === 'SCRIPT' && <TecnicoScript f={f} set={set} erros={erros} />}
+            {f.tipo_solucao === 'AGENTE_IA' && <TecnicoAgenteIA f={f} set={set} erros={erros} />}
+            {f.tipo_solucao === 'SISTEMA_SIMPLES' && <TecnicoSistema f={f} set={set} erros={erros} />}
+            {f.tipo_solucao === 'OUTRO' && <TecnicoOutro f={f} set={set} erros={erros} />}
 
-            {/* ── 5. Dependências externas ── */}
+            {/* ── 5. Avaliação de risco e impacto ── */}
+            <Secao
+              titulo="Avaliação de risco e impacto"
+              sub="Contexto de segurança, privacidade e abrangência — usado pela STI na análise de viabilidade"
+            >
+              <div className="space-y-3">
+                <Chk
+                  checked={f.solucao_em_uso}
+                  onChange={v => set('solucao_em_uso', v)}
+                  label="Essa solução já está atualmente em uso."
+                />
+
+                <Chk
+                  checked={f.dados_sensiveis}
+                  onChange={v => set('dados_sensiveis', v)}
+                  label="Envolve dados sensíveis ou protegidos (LGPD, sigilo funcional, dados de saúde)"
+                >
+                  {f.dados_sensiveis && (
+                    <textarea
+                      className={`mt-1.5 ${ic()} resize-none`}
+                      rows={2}
+                      value={f.dados_sensiveis_desc}
+                      onChange={e => set('dados_sensiveis_desc', e.target.value)}
+                      placeholder="Descreva o tipo de dado (ex: CPF, dados de saúde, sigilo funcional — LGPD Art. 5º)"
+                    />
+                  )}
+                </Chk>
+
+                <Chk
+                  checked={f.impacta_outras_areas}
+                  onChange={v => set('impacta_outras_areas', v)}
+                  label="Impacta outras áreas além da unidade solicitante"
+                >
+                  {f.impacta_outras_areas && (
+                    <input
+                      className={`mt-1.5 ${ic()}`}
+                      value={f.areas_impactadas}
+                      onChange={e => set('areas_impactadas', e.target.value)}
+                      placeholder="Ex: Financeiro, Jurídico, Procuradoria"
+                    />
+                  )}
+                </Chk>
+
+                {f.tipo_solucao !== 'AGENTE_IA' && (
+                  <Chk
+                    checked={f.usa_ia_desenvolvimento}
+                    onChange={v => set('usa_ia_desenvolvimento', v)}
+                    label="Usa IA / LLM no desenvolvimento da solução (ex: GitHub Copilot, Claude, ChatGPT)"
+                  />
+                )}
+              </div>
+            </Secao>
+
+            {/* ── 6. Dependências externas ── */}
             <Secao titulo="Dependências externas"
               sub="Marque tudo que a solução vai precisar — a STI usa isso para avaliar impacto de infraestrutura e segurança">
               <div className="space-y-3">
@@ -817,6 +1027,15 @@ export default function DemandaFormPage() {
                 </Campo>
               </div>
             </Secao>
+
+            {/* ── 7. Documentos da solicitação ── */}
+            <AnexosSolicitacao
+              existentes={arquivosExistentes}
+              novos={arquivosNovos}
+              onNovos={setArquivosNovos}
+              erroAnexo={erroAnexo}
+              setErroAnexo={setErroAnexo}
+            />
 
             {/* ── Ações ── */}
             <div className="flex gap-3 justify-end pt-2 pb-4">

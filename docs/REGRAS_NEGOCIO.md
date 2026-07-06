@@ -52,6 +52,34 @@ def can_send_to_sti(user):
 
 ---
 
+## 1b. PRÉ-CONDIÇÕES PARA SAÍDA DO DRAFT
+
+### RN-DRAFT-001: Gestor Ativo Obrigatório antes de PENDENTE_GESTOR
+```
+Transição: DRAFT → PENDENTE_GESTOR
+Pré-condição: a unidade do solicitante deve ter um gestor designado e ativo
+
+Query verificada:
+  EXISTS (
+    SELECT 1 FROM tb_atribuicoes_gestor ag
+    JOIN tb_usuarios u ON ag.id_gestor = u.id_usuario
+    WHERE ag.id_unidade = demanda.id_unidade
+      AND ag.ativo = true
+      AND u.ativo = true
+  )
+
+Comportamento:
+✓ Backend: bloqueia com HTTP 400, message = "Unidade não possui gestor ativo designado"
+  → Demanda.enviarParaGestor() em models/index.ts (via _buscarGestorUnidade)
+✓ Frontend: exibe aviso amarelo na DemandaDetailPage quando status = DRAFT e gestor_unidade_disponivel = false
+✓ Frontend: botão "Enviar para Gestor" não aparece sem gestor ativo
+  → getAcoesDisponiveis() em DemandaDetailPage.jsx
+✓ Campo gestor_unidade_disponivel: boolean incluído na resposta de GET /api/demandas/:id
+  → Demanda.temGestorAtivo() + DemandaController.obter()
+```
+
+---
+
 ## 2. REGRAS DE VALIDAÇÃO DE GESTOR
 
 ### RN-VAL-001: Campos Obrigatórios para Envio ao Gestor
@@ -128,7 +156,7 @@ Ação: DEVOLVER
 - Validação: Middleware
 
 Ação: APROVAR (STI)
-- Perfil: ANALISTA_STI
+- Perfil: ANALISTA_STI ou GESTOR_SISTEMA
 - Contexto: Demanda deve estar em FILA_STI
 - Validação: Middleware + status
 
@@ -380,7 +408,7 @@ Princípio: Mesma pessoa não pode criar + validar + aprovar
 Implementação:
 - Solicitante NÃO pode ser Gestor da mesma demanda
 - Gestor NÃO pode validar própria demanda
-- Analista STI NÃO pode ser Dev (separação clara)
+- Analista STI e Avaliador Técnico têm perfis separados (revisão hierárquica)
 
 Validação:
 ```sql
@@ -537,5 +565,5 @@ Antes de Deploy, validar:
 ## Referências
 - Normativa: N-PSI-016
 - Padrão: REST API + JSON
-- Banco de Dados: MySQL 8.0+
+- Banco de Dados: PostgreSQL 16
 - Auditoria: Todos os eventos registrados

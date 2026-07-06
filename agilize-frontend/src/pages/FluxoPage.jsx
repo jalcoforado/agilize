@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle, XCircle, RotateCcw, ArrowDown, Package } from 'lucide-react';
+import { CheckCircle, XCircle, RotateCcw, ArrowDown, Package, ChevronDown } from 'lucide-react';
 import Layout from '../components/Layout';
 
 // ─── Actor styles ──────────────────────────────────────────────────────────
@@ -8,7 +8,7 @@ const ACTOR = {
   S: { label: 'Solicitante',   pill: 'bg-tce-100 text-tce-700',       border: 'border-tce-300',     bg: 'bg-tce-50',      text: 'text-tce-700'     },
   G: { label: 'Gestor',        pill: 'bg-amber-100 text-amber-700',    border: 'border-amber-300',   bg: 'bg-amber-50',    text: 'text-amber-800'   },
   I: { label: 'Analista STI',  pill: 'bg-indigo-100 text-indigo-700',  border: 'border-indigo-300',  bg: 'bg-indigo-50',   text: 'text-indigo-700'  },
-  D: { label: 'Diretor STI',   pill: 'bg-violet-100 text-violet-700',  border: 'border-violet-300',  bg: 'bg-violet-50',   text: 'text-violet-700'  },
+  D: { label: 'Avaliador Técnico',   pill: 'bg-violet-100 text-violet-700',  border: 'border-violet-300',  bg: 'bg-violet-50',   text: 'text-violet-700'  },
   O: { label: 'Ops STI',       pill: 'bg-emerald-100 text-emerald-700',border: 'border-emerald-300', bg: 'bg-emerald-50',  text: 'text-emerald-700' },
 };
 
@@ -111,24 +111,34 @@ const PHASE_THEMES = {
   emerald: { hdr: 'bg-emerald-700', bdl: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700',divider: 'divide-emerald-50'},
 };
 
-function Phase({ num, title, sub, theme, children }) {
+function Phase({ num, title, sub, theme, children, open, onToggle }) {
   const t = PHASE_THEMES[theme];
   return (
     <div className={`rounded-xl border ${t.bdl} overflow-hidden`}>
-      <div className={`${t.hdr} px-5 py-3.5 flex items-center gap-3`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`w-full ${t.hdr} px-5 py-3.5 flex items-center gap-3 text-left`}
+      >
         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${t.badge}`}>
           FASE {num}
         </span>
-        <div>
+        <div className="flex-1">
           <h3 className="text-white font-bold text-sm tracking-tight">{title}</h3>
           {sub && <p className="text-white/60 text-[11px] mt-0.5">{sub}</p>}
         </div>
-      </div>
-      <div className={`bg-white p-5 space-y-5 divide-y ${t.divider}`}>
-        {React.Children.map(children, (child, i) => (
-          <div className={i > 0 ? 'pt-4' : ''}>{child}</div>
-        ))}
-      </div>
+        <ChevronDown
+          size={18}
+          className={`text-white/70 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && (
+        <div className={`bg-white p-5 space-y-5 divide-y ${t.divider}`}>
+          {React.Children.map(children, (child, i) => (
+            <div className={i > 0 ? 'pt-4' : ''}>{child}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -138,6 +148,14 @@ export default function FluxoPage() {
   const [params] = useSearchParams();
   const current = params.get('status') ?? '';
   const is = (s) => s === current;
+
+  const [openPhases, setOpenPhases] = useState(new Set([1]));
+  const togglePhase = (num) =>
+    setOpenPhases(prev => {
+      const next = new Set(prev);
+      next.has(num) ? next.delete(num) : next.add(num);
+      return next;
+    });
 
   return (
     <Layout>
@@ -178,7 +196,7 @@ export default function FluxoPage() {
         <div className="space-y-3">
 
           {/* ── FASE 1 ── */}
-          <Phase num={1} title="Solicitação" sub="Solicitante cria a demanda · Gestor valida · STI aprova a viabilidade" theme="blue">
+          <Phase num={1} title="Solicitação" sub="Solicitante cria a demanda · Gestor valida · STI aprova a viabilidade" theme="blue" open={openPhases.has(1)} onToggle={() => togglePhase(1)}>
 
             <Sub title="Caminho principal — aprovação">
               <Row>
@@ -216,19 +234,19 @@ export default function FluxoPage() {
               </Row>
             </Sub>
 
-            <Sub title="Encaminhamento ao Diretor STI (opcional — a critério da STI)">
+            <Sub title="Encaminhamento ao Avaliador Técnico (opcional — a critério da STI)">
               <div className="space-y-3">
                 <Row>
-                  <Node label="Fila da STI"        actor="I" desc="STI opta por consultar Diretor" active={is('FILA_STI')} />
-                  <Arr label="encaminhar diretor" />
-                  <Node label="Ag. Diretor STI"    actor="D" desc="Diretor analisa e emite parecer" active={is('AGUARDANDO_DIRETOR')} />
+                  <Node label="Fila da STI"        actor="I" desc="STI opta por consultar Avaliador Técnico" active={is('FILA_STI')} />
+                  <Arr label="encaminhar avaliador" />
+                  <Node label="Ag. Avaliador Técnico"    actor="D" desc="Avaliador Técnico analisa e emite parecer" active={is('AGUARDANDO_AVALIADOR')} />
                   <Arr label="devolver analista" dashed />
                   <ReturnNode label="Fila da STI"  actor="I" desc="Volta com orientações ao analista" />
                 </Row>
                 <Row muted>
-                  <Node label="Ag. Diretor STI"    actor="D" desc="Ponto de origem" active={is('AGUARDANDO_DIRETOR')} />
+                  <Node label="Ag. Avaliador Técnico"    actor="D" desc="Ponto de origem" active={is('AGUARDANDO_AVALIADOR')} />
                   <Arr label="solicitar ajustes" dashed />
-                  <Node label="Ajustando"          actor="S" desc="Revisando conforme Diretor"        active={is('SOLICITANTE_AJUSTANDO')} />
+                  <Node label="Ajustando"          actor="S" desc="Revisando conforme Avaliador Técnico"        active={is('SOLICITANTE_AJUSTANDO')} />
                   <Arr label="reenviar p/ gestor" />
                   <ReturnNode label="Ag. Gestor"   actor="G" desc="Retorna ao fluxo principal" />
                 </Row>
@@ -255,7 +273,7 @@ export default function FluxoPage() {
           <Connector label="solução aprovada — solicitante inicia o desenvolvimento" />
 
           {/* ── FASE 2 ── */}
-          <Phase num={2} title="Desenvolvimento" sub="Solicitante constrói a solução aprovada e submete para homologação" theme="orange">
+          <Phase num={2} title="Desenvolvimento" sub="Solicitante constrói a solução aprovada e submete para homologação" theme="orange" open={openPhases.has(2)} onToggle={() => togglePhase(2)}>
 
             <Sub title="Fluxo de desenvolvimento">
               <Row>
@@ -272,7 +290,7 @@ export default function FluxoPage() {
           <Connector label="produto entregue — gestor e STI realizam a homologação" />
 
           {/* ── FASE 3 ── */}
-          <Phase num={3} title="Homologação" sub="Gestor valida o produto entregue · STI homologa para produção" theme="indigo">
+          <Phase num={3} title="Homologação" sub="Gestor valida o produto entregue · STI homologa para produção" theme="indigo" open={openPhases.has(3)} onToggle={() => togglePhase(3)}>
 
             <Sub title="Caminho principal — homologação">
               <Row>
@@ -317,19 +335,19 @@ export default function FluxoPage() {
               </div>
             </Sub>
 
-            <Sub title="Encaminhamento ao Diretor STI — homologação (opcional — a critério da STI)">
+            <Sub title="Encaminhamento ao Avaliador Técnico — homologação (opcional — a critério da STI)">
               <div className="space-y-3">
                 <Row>
-                  <Node label="Fila Hom. STI"           actor="I" desc="STI opta por consultar Diretor" active={is('FILA_HOMOLOGACAO_STI')} />
-                  <Arr label="encaminhar diretor" />
-                  <Node label="Ag. Diretor (Hom.)"      actor="D" desc="Diretor analisa e emite parecer" active={is('AGUARDANDO_DIRETOR_HOMOLOGACAO')} />
+                  <Node label="Fila Hom. STI"           actor="I" desc="STI opta por consultar Avaliador Técnico" active={is('FILA_HOMOLOGACAO_STI')} />
+                  <Arr label="encaminhar avaliador" />
+                  <Node label="Ag. Avaliador (Hom.)"    actor="D" desc="Avaliador Técnico analisa e emite parecer" active={is('AGUARDANDO_AVALIADOR_HOMOLOGACAO')} />
                   <Arr label="devolver analista" dashed />
                   <ReturnNode label="Fila Hom. STI"     actor="I" desc="Volta com orientações ao analista" />
                 </Row>
                 <Row muted>
-                  <Node label="Ag. Diretor (Hom.)"      actor="D" desc="Ponto de origem" active={is('AGUARDANDO_DIRETOR_HOMOLOGACAO')} />
+                  <Node label="Ag. Avaliador (Hom.)"    actor="D" desc="Ponto de origem" active={is('AGUARDANDO_AVALIADOR_HOMOLOGACAO')} />
                   <Arr label="solicitar ajustes" dashed />
-                  <Node label="Ajustando (Hom.)"        actor="S" desc="Revisando conforme Diretor"       active={is('AJUSTANDO_HOMOLOGACAO')} />
+                  <Node label="Ajustando (Hom.)"        actor="S" desc="Revisando conforme Avaliador Técnico"  active={is('AJUSTANDO_HOMOLOGACAO')} />
                   <Arr label="reenviar p/ gestor" />
                   <ReturnNode label="Ag. Gestor (Hom.)" actor="G" desc="Retorna ao fluxo principal" />
                 </Row>
@@ -341,7 +359,7 @@ export default function FluxoPage() {
           <Connector label="homologada — ops STI executa o deploy" />
 
           {/* ── FASE 4 ── */}
-          <Phase num={4} title="Produção" sub="Deploy e monitoramento — quem executa depende do tipo definido na homologação" theme="emerald">
+          <Phase num={4} title="Produção" sub="Deploy e monitoramento — quem executa depende do tipo definido na homologação" theme="emerald" open={openPhases.has(4)} onToggle={() => togglePhase(4)}>
 
             <Sub title="Tipo de deploy — definido pela STI ao homologar">
               <div className="flex flex-wrap gap-4">

@@ -20,9 +20,12 @@ const STATUS_CONFIG = {
   VALIDADA_HOMOLOGACAO_GESTOR:   { label: 'Validada p/ Hom.',          cls: 'bg-tce-100 text-tce-700' },
   FILA_HOMOLOGACAO_STI:          { label: 'Fila Hom. STI',             cls: 'bg-indigo-100 text-indigo-700' },
   SOLICITADO_AJUSTES_HOMOLOGACAO:{ label: 'Ajustes Hom.',              cls: 'bg-purple-100 text-purple-700' },
-  // DIRETOR_STI
-  AGUARDANDO_DIRETOR:            { label: 'Ag. Diretor STI',           cls: 'bg-violet-100 text-violet-700' },
-  AGUARDANDO_DIRETOR_HOMOLOGACAO:{ label: 'Ag. Diretor STI (Hom.)',    cls: 'bg-violet-100 text-violet-700' },
+  // AVALIADOR_TECNICO
+  AGUARDANDO_AVALIADOR:            { label: 'Ag. Avaliador Técnico',     cls: 'bg-violet-100 text-violet-700' },
+  AGUARDANDO_AVALIADOR_HOMOLOGACAO:{ label: 'Ag. Avaliador Técnico (Hom.)', cls: 'bg-violet-100 text-violet-700' },
+  // DPO
+  AGUARDANDO_DPO:                { label: 'Aguardando DPO',            cls: 'bg-amber-100 text-amber-800' },
+  AGUARDANDO_DPO_HOMOLOGACAO:    { label: 'Homologação DPO',           cls: 'bg-amber-100 text-amber-800' },
   HOMOLOGADA:                    { label: 'Homologada',                cls: 'bg-emerald-100 text-emerald-700' },
   // Fase 4 — Produção
   EM_PRODUCAO:                   { label: 'Em Produção',               cls: 'bg-tce-700 text-white' },
