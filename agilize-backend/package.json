@@ -2,16 +2,21 @@
   "name": "agilize-backend",
   "version": "2.0.0",
   "description": "Agilize 2.0 — Gestão de Soluções Setoriais (N-PSI-016)",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit",
     "test": "jest --runInBand --coverage --forceExit",
     "test:watch": "jest --runInBand --watch --forceExit",
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
     "seed": "knex seed:run",
-    "db:setup": "npm run migrate && npm run seed"
+    "db:setup": "npm run migrate && npm run seed",
+    "db:backup": "node src/db/scripts/backup.js",
+    "db:reset": "npm run db:backup && node src/db/scripts/reset-schema.js && npm run migrate && npm run seed",
+    "db:export": "node src/db/scripts/export-seed.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.37.0",
@@ -28,13 +33,28 @@
     "nodemailer": "^6.9.7",
     "pg": "^8.11.3",
     "redis": "^4.6.12",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.25",
+    "@types/express-serve-static-core": "^4.19.8",
+    "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^25.9.3",
+    "@types/nodemailer": "^8.0.1",
+    "@types/supertest": "^7.2.0",
+    "@types/uuid": "^10.0.0",
     "eslint": "^8.55.0",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
-    "supertest": "^6.3.3"
+    "supertest": "^6.3.3",
+    "ts-jest": "^29.4.11",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=18.0.0"

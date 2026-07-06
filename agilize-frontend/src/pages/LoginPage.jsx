@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { authService } from '../services/api';
@@ -37,9 +37,9 @@ export default function LoginPage() {
 
         <div className="relative z-10 text-center">
           <img
-            src="/logos/logo_vertical_png.png"
+            src="/logos/LOGO-BRANCA.svg"
             alt="TCE-CE — Tribunal de Contas do Estado do Ceará"
-            className="w-48 mx-auto mb-10 drop-shadow-lg"
+            className="w-56 mx-auto mb-10 drop-shadow-lg"
           />
           <div className="w-16 h-0.5 bg-white/40 mx-auto mb-8" />
           <h2 className="text-white text-2xl font-semibold tracking-tight mb-3">
@@ -56,7 +56,7 @@ export default function LoginPage() {
       </div>
 
       {/* Painel direito — formulário */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-white">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-white relative">
         {/* Logo mobile */}
         <div className="lg:hidden mb-8 text-center">
           <img
@@ -66,7 +66,7 @@ export default function LoginPage() {
           />
         </div>
 
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-sm -translate-y-[45px]">
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-neutral-800 mb-1">Entrar no sistema</h1>
             <p className="text-neutral-500 text-sm">Use suas credenciais institucionais</p>
@@ -114,7 +114,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   disabled={carregando}
                   required
-                  className="w-full px-3.5 py-2.5 pr-10 border border-neutral-300 rounded-lg text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-tce-500 focus:border-tce-500 disabled:bg-neutral-50 disabled:text-neutral-400 transition"
+                  className="w-full px-3.5 py-2.5 pr-10 border border-neutral-300 rounded-lg text-sm text-neutral-800 placeholder-neutral-400 focus:placeholder-transparent focus:outline-none focus:ring-2 focus:ring-tce-500 focus:border-tce-500 disabled:bg-neutral-50 disabled:text-neutral-400 transition"
                 />
                 <button
                   type="button"
@@ -144,7 +144,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="mt-auto pt-12 text-xs text-neutral-400 text-center">
+        <p className="absolute bottom-6 text-xs text-neutral-400 text-center">
           Agilize 2.0 — Conformidade N-PSI-016 &nbsp;·&nbsp; TCE-CE {new Date().getFullYear()}
         </p>
       </div>

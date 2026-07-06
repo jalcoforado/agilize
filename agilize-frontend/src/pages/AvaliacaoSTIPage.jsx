@@ -3,12 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, AlertTriangle, CheckCircle, XCircle,
   ChevronDown, ChevronUp, Shield, Bot, Cpu, BarChart2,
-  Terminal, Globe, Package, Server, Info, Sparkles, UserCog, X, User,
+  Terminal, Globe, Package, Server, Info, Sparkles, UserCog, X, User, ShieldAlert,
 } from 'lucide-react';
 import { demandaService, usuarioService } from '../services/api';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
-import RichTextEditor from '../components/RichTextEditor';
+import FormParecer from '../components/FormParecer';
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -190,46 +190,61 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
   const [acaoAtiva, setAcaoAtiva]       = useState(null);
   const [enviando, setEnviando]         = useState(false);
   const [erroLocal, setErroLocal]       = useState('');
+  const [anexos, setAnexos]             = useState([]);
+  const [responsaveis, setResponsaveis]                     = useState([]);
+  const [loadingResponsaveis, setLoadingResponsaveis]       = useState(false);
+  const [responsavelSelecionado, setResponsavelSelecionado] = useState('');
+  const [erroResponsaveis, setErroResponsaveis]             = useState('');
 
-  // Modal encaminhar ao diretor
-  const [showDiretorModal, setShowDiretorModal] = useState(false);
-  const [diretores, setDiretores]               = useState([]);
-  const [loadingDiretores, setLoadingDiretores] = useState(false);
-  const [diretorSelecionado, setDiretorSelecionado] = useState('');
-  const [comentarioDiretor, setComentarioDiretor]   = useState('');
-  const [enviandoDiretor, setEnviandoDiretor]       = useState(false);
-  const [erroDiretor, setErroDiretor]               = useState('');
+  // Modal encaminhar ao Avaliador Técnico
+  const [showAvaliadorModal, setShowAvaliadorModal] = useState(false);
+  const [comentarioAvaliador, setComentarioAvaliador] = useState('');
+  const [enviandoAvaliador, setEnviandoAvaliador]     = useState(false);
+  const [erroAvaliador, setErroAvaliador]             = useState('');
 
-  const abrirModalDiretor = async () => {
-    setShowDiretorModal(true);
-    setErroDiretor('');
-    setDiretorSelecionado('');
-    setComentarioDiretor('');
-    if (diretores.length === 0) {
-      setLoadingDiretores(true);
-      try {
-        const { data } = await usuarioService.listarDiretores();
-        setDiretores(data.diretores || []);
-      } catch {
-        setErroDiretor('Não foi possível carregar a lista de diretores.');
-      } finally {
-        setLoadingDiretores(false);
-      }
+  // Modal encaminhar ao DPO
+  const [showDPOModal, setShowDPOModal]         = useState(false);
+  const [comentarioDPO, setComentarioDPO]       = useState('');
+  const [enviandoDPO, setEnviandoDPO]           = useState(false);
+  const [erroDPO, setErroDPO]                   = useState('');
+
+  const abrirModalDPO = () => {
+    setShowDPOModal(true);
+    setErroDPO('');
+    setComentarioDPO('');
+  };
+
+  const confirmarEncaminharDPO = async () => {
+    setEnviandoDPO(true);
+    setErroDPO('');
+    try {
+      await demandaService.encaminharDPO(idDemanda, comentarioDPO);
+      setShowDPOModal(false);
+      onSucesso('encaminhar-dpo');
+    } catch (err) {
+      setErroDPO(err.response?.data?.message || 'Erro ao encaminhar ao DPO');
+    } finally {
+      setEnviandoDPO(false);
     }
   };
 
-  const confirmarEncaminharDiretor = async () => {
-    if (!diretorSelecionado) { setErroDiretor('Selecione um diretor'); return; }
-    setEnviandoDiretor(true);
-    setErroDiretor('');
+  const abrirModalAvaliador = () => {
+    setShowAvaliadorModal(true);
+    setErroAvaliador('');
+    setComentarioAvaliador('');
+  };
+
+  const confirmarEncaminharAvaliador = async () => {
+    setEnviandoAvaliador(true);
+    setErroAvaliador('');
     try {
-      await demandaService.encaminharDiretor(idDemanda, diretorSelecionado, comentarioDiretor);
-      setShowDiretorModal(false);
-      onSucesso('encaminhar-diretor');
+      await demandaService.encaminharAvaliador(idDemanda, comentarioAvaliador);
+      setShowAvaliadorModal(false);
+      onSucesso('encaminhar-avaliador');
     } catch (err) {
-      setErroDiretor(err.response?.data?.message || 'Erro ao encaminhar ao diretor');
+      setErroAvaliador(err.response?.data?.message || 'Erro ao encaminhar ao Avaliador Técnico');
     } finally {
-      setEnviandoDiretor(false);
+      setEnviandoAvaliador(false);
     }
   };
 
@@ -246,16 +261,35 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
     );
   }
 
+  const handleTipoDeploy = async (valor) => {
+    setTipoDeploy(valor);
+    setResponsavelSelecionado('');
+    if (valor === 'OPS_DEPLOY' && responsaveis.length === 0) {
+      setLoadingResponsaveis(true);
+      setErroResponsaveis('');
+      try {
+        const { data } = await usuarioService.listarResponsaveisProducao();
+        setResponsaveis(data.responsaveis || []);
+      } catch {
+        setErroResponsaveis('Não foi possível carregar os responsáveis de produção.');
+      } finally {
+        setLoadingResponsaveis(false);
+      }
+    }
+  };
+
   const validar = (acao) => {
     setErroLocal('');
     if (['reprovar-sti', 'rejeitar-homologacao'].includes(acao)) {
       if (!motivo.trim()) { setErroLocal('Informe o motivo'); return false; }
       if (parecerText.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
     } else if (acao === 'homologar') {
-      if (parecerText.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
       if (!tipoDeploy) { setErroLocal('Selecione o tipo de deploy'); return false; }
+      if (tipoDeploy === 'OPS_DEPLOY' && !responsavelSelecionado) {
+        setErroLocal('Selecione o responsável de produção para deploy OPS/Infra'); return false;
+      }
     } else {
-      if (parecerText.trim().length < 20) { setErroLocal('Parecer precisa ter pelo menos 20 caracteres'); return false; }
+      // parecer é opcional em ações de aprovação
     }
     return true;
   };
@@ -266,17 +300,21 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
     setAcaoAtiva(acao);
     try {
       if (acao === 'aprovar-sti')
-        await demandaService.aprovarSTI(idDemanda, parecer, comentario);
+        await demandaService.aprovarSTI(idDemanda, parecer, comentario, anexos);
       else if (acao === 'solicitar-ajustes-sti')
-        await demandaService.solicitarAjustesSTI(idDemanda, parecer, comentario);
+        await demandaService.solicitarAjustesSTI(idDemanda, parecer, comentario, anexos);
       else if (acao === 'reprovar-sti')
-        await demandaService.reprovarSTI(idDemanda, motivo, parecer);
+        await demandaService.reprovarSTI(idDemanda, motivo, parecer, anexos);
       else if (acao === 'homologar')
-        await demandaService.homologar(idDemanda, parecer, comentario, tipoDeploy);
+        await demandaService.homologar(
+          idDemanda, parecer, comentario, tipoDeploy,
+          tipoDeploy === 'OPS_DEPLOY' ? responsavelSelecionado : null,
+          anexos
+        );
       else if (acao === 'solicitar-ajustes-homologacao')
-        await demandaService.solicitarAjustesHomologacao(idDemanda, parecer, comentario);
+        await demandaService.solicitarAjustesHomologacao(idDemanda, parecer, comentario, anexos);
       else if (acao === 'rejeitar-homologacao')
-        await demandaService.rejeitarHomologacao(idDemanda, motivo, parecer);
+        await demandaService.rejeitarHomologacao(idDemanda, motivo, parecer, anexos);
       onSucesso(acao);
     } catch (err) {
       onErro(err.response?.data?.message || 'Erro ao executar a ação');
@@ -328,34 +366,22 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
           </div>
         )}
 
-        {/* Parecer principal */}
-        <div>
-          <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-            Parecer técnico <span className="text-red-500">*</span>
-            <span className="font-normal text-neutral-400 ml-1">(mín. 20 caracteres)</span>
-          </label>
-          <RichTextEditor
-            value={parecer}
-            onChange={setParecer}
-            onTextChange={setParecerText}
-            minRows={5}
-            placeholder={isFase1
-              ? 'Descreva a análise de viabilidade: adequação técnica, riscos, dependências, alinhamento com a política institucional...'
-              : 'Descreva o resultado da homologação: qualidade técnica, conformidade, testes realizados, critérios de aceite...'
-            }
-          />
-          <p className="text-right text-[11px] text-neutral-400 mt-0.5">{parecerText.length} / 5000</p>
-        </div>
-
-        {/* Comentário opcional */}
-        <div>
-          <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-            Comentário interno <span className="font-normal text-neutral-400">(opcional)</span>
-          </label>
-          <textarea className={ic + ' resize-none'} rows={2} value={comentario}
-            onChange={e => setComentario(e.target.value)}
-            placeholder="Observações internas que não constam no parecer oficial..." />
-        </div>
+        {/* Parecer + comentário */}
+        <FormParecer
+          parecer={parecer}
+          onParecerChange={setParecer}
+          onTextChange={setParecerText}
+          comentario={comentario}
+          onComentarioChange={setComentario}
+          onAnexosChange={setAnexos}
+          label={isFase1 ? 'Parecer técnico' : 'Parecer de homologação'}
+          placeholder={isFase1
+            ? 'Descreva a análise de viabilidade: adequação técnica, riscos, dependências, alinhamento com a política institucional...'
+            : 'Descreva o resultado da homologação: qualidade técnica, conformidade, testes realizados, critérios de aceite...'
+          }
+          comentarioPlaceholder="Observações internas que não constam no parecer oficial..."
+          minRows={5}
+        />
 
         {/* Tipo de deploy — só fase 3 / homologação */}
         {isFase3 && (
@@ -368,7 +394,7 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
                 { value: 'SELF_DEPLOY', label: 'Self-deploy', desc: 'O solicitante faz o deploy', Icon: User   },
                 { value: 'OPS_DEPLOY',  label: 'Ops / Infra',  desc: 'Equipe de Operações faz',  Icon: Server },
               ].map(opt => (
-                <button key={opt.value} type="button" onClick={() => setTipoDeploy(opt.value)}
+                <button key={opt.value} type="button" onClick={() => handleTipoDeploy(opt.value)}
                   className={`text-left rounded-lg border-2 p-2.5 transition-all ${
                     tipoDeploy === opt.value
                       ? 'border-tce-500 bg-tce-50'
@@ -382,6 +408,33 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
                 </button>
               ))}
             </div>
+            {tipoDeploy === 'OPS_DEPLOY' && (
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  Responsável de produção <span className="text-red-500">*</span>
+                </label>
+                {loadingResponsaveis ? (
+                  <div className="flex items-center gap-2 py-2 text-sm text-neutral-400">
+                    <Loader2 size={14} className="animate-spin" /> Carregando responsáveis...
+                  </div>
+                ) : erroResponsaveis ? (
+                  <p className="text-sm text-red-500 flex items-center gap-1.5">
+                    <AlertTriangle size={13} />{erroResponsaveis}
+                  </p>
+                ) : (
+                  <select
+                    value={responsavelSelecionado}
+                    onChange={e => setResponsavelSelecionado(e.target.value)}
+                    className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-500"
+                  >
+                    <option value="">Selecione um responsável...</option>
+                    {responsaveis.map(r => (
+                      <option key={r.id_usuario} value={r.id_usuario}>{r.nome}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -405,85 +458,128 @@ function FormularioAvaliacao({ status, idDemanda, onSucesso, onErro }) {
           </>}
         </div>
 
-        {/* Encaminhar ao diretor */}
-        <div className="border-t border-neutral-100 pt-3">
-          <button onClick={abrirModalDiretor} disabled={enviando}
+        {/* Encaminhar ao Avaliador Técnico */}
+        <div className="border-t border-neutral-100 pt-3 space-y-2">
+          <button onClick={abrirModalAvaliador} disabled={enviando}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
                        border border-neutral-200 text-neutral-600 hover:border-tce-300 hover:text-tce-700
                        hover:bg-tce-50 transition disabled:opacity-40">
             <UserCog size={14} />
-            Encaminhar ao Diretor STI
+            Encaminhar ao Avaliador Técnico
+          </button>
+          <button onClick={abrirModalDPO} disabled={enviando}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
+                       border border-amber-200 text-amber-700 hover:border-amber-400 hover:text-amber-800
+                       hover:bg-amber-50 transition disabled:opacity-40">
+            <ShieldAlert size={14} />
+            Encaminhar ao DPO
           </button>
         </div>
 
       </div>
     </div>
 
-    {/* Modal encaminhar ao diretor */}
-    {showDiretorModal && (
+    {/* Modal encaminhar ao Avaliador Técnico */}
+    {showAvaliadorModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
             <div className="flex items-center gap-2">
               <UserCog size={16} className="text-tce-600" />
-              <h3 className="text-sm font-semibold text-neutral-800">Encaminhar ao Diretor STI</h3>
+              <h3 className="text-sm font-semibold text-neutral-800">Encaminhar ao Avaliador Técnico</h3>
             </div>
-            <button onClick={() => setShowDiretorModal(false)}
+            <button onClick={() => setShowAvaliadorModal(false)}
               className="text-neutral-400 hover:text-neutral-600 transition">
               <X size={16} />
             </button>
           </div>
 
           <div className="px-5 py-4 space-y-4">
-            <p className="text-xs text-neutral-500 leading-relaxed">
-              A demanda será encaminhada ao diretor selecionado. Ele poderá solicitar ajustes ao solicitante ou devolver ao analista com orientações.
-            </p>
-
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                Diretor responsável <span className="text-red-500">*</span>
-              </label>
-              {loadingDiretores ? (
-                <div className="flex items-center gap-2 py-2 text-sm text-neutral-400">
-                  <Loader2 size={14} className="animate-spin" /> Carregando diretores...
-                </div>
-              ) : (
-                <select value={diretorSelecionado} onChange={e => setDiretorSelecionado(e.target.value)}
-                  className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-500">
-                  <option value="">Selecione um diretor...</option>
-                  {diretores.map(d => (
-                    <option key={d.id_usuario} value={d.id_usuario}>{d.nome}</option>
-                  ))}
-                </select>
-              )}
+            <div className="rounded-lg bg-violet-50 border border-violet-200 px-4 py-3 text-sm text-violet-700">
+              A demanda será encaminhada para revisão. Qualquer Avaliador Técnico ativo poderá analisá-la.
             </div>
 
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1.5">
                 Comentário <span className="font-normal text-neutral-400">(opcional)</span>
               </label>
-              <textarea value={comentarioDiretor} onChange={e => setComentarioDiretor(e.target.value)}
+              <textarea value={comentarioAvaliador} onChange={e => setComentarioAvaliador(e.target.value)}
                 rows={3} placeholder="Motivo do encaminhamento, pontos a verificar..."
                 className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-tce-500" />
             </div>
 
-            {erroDiretor && (
+            {erroAvaliador && (
               <p className="text-sm text-red-600 flex items-center gap-1.5">
-                <AlertTriangle size={13} /> {erroDiretor}
+                <AlertTriangle size={13} /> {erroAvaliador}
               </p>
             )}
           </div>
 
           <div className="px-5 py-3 border-t border-neutral-100 flex gap-2 justify-end">
-            <button onClick={() => setShowDiretorModal(false)}
+            <button onClick={() => setShowAvaliadorModal(false)}
               className="px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 rounded-lg transition">
               Cancelar
             </button>
-            <button onClick={confirmarEncaminharDiretor} disabled={enviandoDiretor || loadingDiretores}
+            <button onClick={confirmarEncaminharAvaliador} disabled={enviandoAvaliador}
               className="px-4 py-2 text-sm font-semibold bg-tce-700 text-white rounded-lg hover:bg-tce-800 transition disabled:opacity-50 flex items-center gap-2">
-              {enviandoDiretor && <Loader2 size={14} className="animate-spin" />}
+              {enviandoAvaliador && <Loader2 size={14} className="animate-spin" />}
               Encaminhar
             </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal encaminhar ao DPO */}
+    {showDPOModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={16} className="text-amber-600" />
+              <h3 className="text-sm font-semibold text-neutral-800">Encaminhar ao DPO</h3>
+            </div>
+            <button onClick={() => setShowDPOModal(false)}
+              className="text-neutral-400 hover:text-neutral-600 transition">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="px-5 py-4 space-y-4">
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+              A demanda será encaminhada ao DPO para análise LGPD. Qualquer DPO ativo poderá analisá-la.
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                Observação <span className="font-normal text-neutral-400">(opcional)</span>
+              </label>
+              <textarea
+                value={comentarioDPO}
+                onChange={e => setComentarioDPO(e.target.value)}
+                rows={3}
+                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                placeholder="Descreva o motivo do encaminhamento ao DPO..."
+              />
+            </div>
+
+            {erroDPO && (
+              <p className="text-sm text-red-600 flex items-center gap-1.5">
+                <AlertTriangle size={13} />{erroDPO}
+              </p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowDPOModal(false)}
+                className="flex-1 px-3 py-2.5 rounded-lg text-sm font-semibold border border-neutral-200 text-neutral-600 hover:bg-neutral-50 transition">
+                Cancelar
+              </button>
+              <button onClick={confirmarEncaminharDPO} disabled={enviandoDPO}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white transition disabled:opacity-50">
+                {enviandoDPO ? <Loader2 size={14} className="animate-spin" /> : <ShieldAlert size={14} />}
+                Encaminhar ao DPO
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -542,7 +638,8 @@ export default function AvaliacaoSTIPage() {
       'homologar':                     'Demanda homologada com sucesso.',
       'solicitar-ajustes-homologacao': 'Ajustes de homologação solicitados.',
       'rejeitar-homologacao':          'Produto rejeitado na homologação.',
-      'encaminhar-diretor':            'Demanda encaminhada ao Diretor STI.',
+      'encaminhar-avaliador':          'Demanda encaminhada ao Avaliador Técnico.',
+      'encaminhar-dpo':               'Demanda encaminhada ao DPO.',
     };
     setSucesso(msgs[acao] || 'Ação realizada.');
     setTimeout(() => { setSucesso(''); navigate('/validacao'); }, 2500);

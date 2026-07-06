@@ -2,7 +2,10 @@ import { useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered } from 'lucide-react';
+import {
+  Bold, Italic, Underline as UnderlineIcon, Strikethrough,
+  List, ListOrdered,
+} from 'lucide-react';
 
 function ToolbarBtn({ onClick, active, title, children }) {
   return (
@@ -45,7 +48,6 @@ export default function RichTextEditor({
     if (editor) editor.setEditable(!disabled);
   }, [disabled, editor]);
 
-  // Limpa o editor quando o valor externo é resetado para vazio
   useEffect(() => {
     if (editor && value === '' && !editor.isEmpty) {
       editor.commands.clearContent(true);
@@ -57,7 +59,7 @@ export default function RichTextEditor({
   return (
     <div className={`border border-neutral-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-tce-500 focus-within:border-tce-500 transition ${disabled ? 'opacity-60 bg-neutral-50' : 'bg-white'} ${className}`}>
       {!disabled && (
-        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-neutral-200 bg-neutral-50">
+        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-neutral-200 bg-neutral-50 rounded-t-lg flex-wrap">
           <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title="Negrito (Ctrl+B)">
             <Bold size={14} />
           </ToolbarBtn>
@@ -70,7 +72,9 @@ export default function RichTextEditor({
           <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} title="Tachado">
             <Strikethrough size={14} />
           </ToolbarBtn>
+
           <div className="w-px h-4 bg-neutral-300 mx-1" />
+
           <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} title="Lista de itens">
             <List size={14} />
           </ToolbarBtn>

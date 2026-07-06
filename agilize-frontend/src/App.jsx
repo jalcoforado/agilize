@@ -11,7 +11,9 @@ import InventarioPage from './pages/InventarioPage';
 import AdminPage from './pages/AdminPage';
 import RelatoriosPage from './pages/RelatoriosPage';
 import AvaliacaoSTIPage from './pages/AvaliacaoSTIPage';
-import AvaliacaoDiretorPage from './pages/AvaliacaoDiretorPage';
+import AvaliacaoAvaliadorPage from './pages/AvaliacaoAvaliadorPage';
+import AvaliacaoDPOPage from './pages/AvaliacaoDPOPage';
+import ProcessMapPage from './pages/ProcessMapPage';
 import './styles/globals.css';
 
 function ProtectedRoute({ children }) {
@@ -39,7 +41,9 @@ export default function App() {
         <Route path="/admin" element={<Protegido><AdminPage /></Protegido>} />
         <Route path="/relatorios" element={<Protegido><RelatoriosPage /></Protegido>} />
         <Route path="/avaliacao/:id" element={<Protegido><AvaliacaoSTIPage /></Protegido>} />
-        <Route path="/avaliacao-diretor/:id" element={<Protegido><AvaliacaoDiretorPage /></Protegido>} />
+        <Route path="/avaliacao-avaliador/:id" element={<Protegido><AvaliacaoAvaliadorPage /></Protegido>} />
+        <Route path="/avaliacao-dpo/:id" element={<Protegido><AvaliacaoDPOPage /></Protegido>} />
+        <Route path="/mapa-processo" element={<Protegido><ProcessMapPage /></Protegido>} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

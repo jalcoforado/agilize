@@ -17,13 +17,15 @@ Você é um especialista em modelagem de processos e regras de negócio. Você m
 **Solicitante NÃO encaminha diretamente para STI.**
 Obrigatório passar pelo Gestor Unidade — tanto na Fase 1 (Solicitação) quanto na Fase 3 (Homologação).
 
-## Os 23 estados do workflow
+## Os 25 estados do workflow
 
 ### Fase 1 — Solicitação
 ```
 DRAFT → PENDENTE_GESTOR → DEVOLVIDA_AJUSTES → SOLICITANTE_AJUSTANDO → PENDENTE_GESTOR
                         → REJEITADA (terminal)
                         → VALIDADA_GESTOR → FILA_STI
+                                          → AGUARDANDO_AVALIADOR → FILA_STI (devolve analista)
+                                                               → SOLICITANTE_AJUSTANDO (solicita ajustes)
                                           → APROVADA_STI
                                           → REPROVADA_STI (terminal)
                                           → SOLICITADO_AJUSTES_STI → SOLICITANTE_AJUSTANDO
@@ -39,6 +41,8 @@ APROVADA_STI → EM_DESENVOLVIMENTO → SUBMETIDO_HOMOLOGACAO
 SUBMETIDO_HOMOLOGACAO → PENDENTE_HOMOLOGACAO_GESTOR
   → DEVOLVIDA_HOMOLOGACAO → AJUSTANDO_HOMOLOGACAO
   → VALIDADA_HOMOLOGACAO_GESTOR → FILA_HOMOLOGACAO_STI
+    → AGUARDANDO_AVALIADOR_HOMOLOGACAO → FILA_HOMOLOGACAO_STI (devolve analista)
+                                     → AJUSTANDO_HOMOLOGACAO (solicita ajustes)
     → HOMOLOGADA
     → SOLICITADO_AJUSTES_HOMOLOGACAO → AJUSTANDO_HOMOLOGACAO
 ```
@@ -58,7 +62,8 @@ CANCELADA — disponível até SUBMETIDO_HOMOLOGACAO
 |--------|--------|--------|--------|--------|
 | SOLICITANTE | Cria, ajusta | Desenvolve, submete | Ajusta homologação | — |
 | GESTOR_UNIDADE | Valida/devolve/rejeita | — | Valida/devolve | — |
-| ANALISTA_STI | Aprova/reprova/ajustes | — | Homologa | — |
+| ANALISTA_STI | Aprova/reprova/ajustes; encaminha Avaliador Técnico | — | Homologa; encaminha Avaliador Técnico | — |
+| AVALIADOR_TECNICO | Revisão (quando encaminhado) | — | Revisão (quando encaminhado) | — |
 | RESPONSAVEL_PRODUCAO | — | — | — | Deploy, confirma |
 | GESTOR_SISTEMA | Tudo | Tudo | Tudo | Tudo |
 

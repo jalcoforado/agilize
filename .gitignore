@@ -41,3 +41,6 @@ vite.config.js.timestamp-*
 
 # Claude Code — configurações locais (caminhos e permissões da máquina)
 .claude/settings.local.json
+
+# Scripts utilitários de dev (não versionar)
+agilize-backend/scripts/populate_usuarios.sql

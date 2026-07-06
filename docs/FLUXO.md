@@ -27,7 +27,7 @@ O Solicitante descreve a solução que pretende construir. Passa pela validaçã
 stateDiagram-v2
     [*] --> DRAFT : criar (Solicitante)
 
-    DRAFT --> PENDENTE_GESTOR : enviarParaGestor
+    DRAFT --> PENDENTE_GESTOR : enviarParaGestor [gestor ativo na unidade]
 
     PENDENTE_GESTOR --> VALIDADA_GESTOR : validar [checklist]
     PENDENTE_GESTOR --> DEVOLVIDA_AJUSTES : devolver
@@ -36,13 +36,23 @@ stateDiagram-v2
     DEVOLVIDA_AJUSTES --> SOLICITANTE_AJUSTANDO : iniciarAjuste
     SOLICITANTE_AJUSTANDO --> PENDENTE_GESTOR : reenviar
 
-    VALIDADA_GESTOR --> FILA_STI : enviarParaSTI
+    VALIDADA_GESTOR --> FILA_STI : enviarParaSTI [dados_sensiveis=false]
+    VALIDADA_GESTOR --> AGUARDANDO_DPO : enviarParaSTI [dados_sensiveis=true]
+
+    FILA_STI --> AGUARDANDO_DPO : encaminharDPO (Analista STI)
+
+    AGUARDANDO_DPO --> FILA_STI : dpoAprovar (DPO)
+    AGUARDANDO_DPO --> SOLICITANTE_AJUSTANDO : dpoSolicitarAjustes (DPO)
 
     FILA_STI --> APROVADA_STI : aprovar [checklist + IA]
     FILA_STI --> REPROVADA_STI : reprovar
     FILA_STI --> SOLICITADO_AJUSTES_STI : solicitarAjustes
+    FILA_STI --> AGUARDANDO_AVALIADOR : encaminharAvaliador (Analista STI)
 
     SOLICITADO_AJUSTES_STI --> SOLICITANTE_AJUSTANDO : iniciarAjuste
+
+    AGUARDANDO_AVALIADOR --> FILA_STI : devolverAnalista (Avaliador Técnico)
+    AGUARDANDO_AVALIADOR --> SOLICITANTE_AJUSTANDO : solicitarAjustes (Avaliador Técnico)
 
     note right of FILA_STI
         Agente IA dispara automaticamente
@@ -54,6 +64,8 @@ stateDiagram-v2
     REPROVADA_STI --> [*]
     APROVADA_STI --> [*]
 ```
+
+> **Pré-condição para `DRAFT → PENDENTE_GESTOR`:** a unidade do solicitante deve ter pelo menos um gestor designado e ativo em `tb_atribuicoes_gestor`. Caso contrário, a transição é bloqueada no backend (HTTP 400) e o frontend exibe aviso amarelo antes de o usuário tentar a ação.
 
 ---
 
@@ -84,14 +96,24 @@ stateDiagram-v2
     PENDENTE_HOMOLOGACAO_GESTOR --> DEVOLVIDA_HOMOLOGACAO : devolver
 
     DEVOLVIDA_HOMOLOGACAO --> AJUSTANDO_HOMOLOGACAO : iniciarAjuste
-    AJUSTANDO_HOMOLOGACAO --> PENDENTE_HOMOLOGACAO_GESTOR : reenviar
+    AJUSTANDO_HOMOLOGACAO --> SUBMETIDO_HOMOLOGACAO : submeterProduto
 
-    VALIDADA_HOMOLOGACAO_GESTOR --> FILA_HOMOLOGACAO_STI : enviarParaSTI
+    VALIDADA_HOMOLOGACAO_GESTOR --> FILA_HOMOLOGACAO_STI : enviarParaSTI [dados_sensiveis=false]
+    VALIDADA_HOMOLOGACAO_GESTOR --> AGUARDANDO_DPO_HOMOLOGACAO : enviarParaSTI [dados_sensiveis=true]
+
+    FILA_HOMOLOGACAO_STI --> AGUARDANDO_DPO_HOMOLOGACAO : encaminharDPO (Analista STI)
+
+    AGUARDANDO_DPO_HOMOLOGACAO --> FILA_HOMOLOGACAO_STI : dpoAprovar (DPO)
+    AGUARDANDO_DPO_HOMOLOGACAO --> AJUSTANDO_HOMOLOGACAO : dpoSolicitarAjustes (DPO)
 
     FILA_HOMOLOGACAO_STI --> HOMOLOGADA : homologar [checklist + IA]
     FILA_HOMOLOGACAO_STI --> SOLICITADO_AJUSTES_HOMOLOGACAO : solicitarAjustes
+    FILA_HOMOLOGACAO_STI --> AGUARDANDO_AVALIADOR_HOMOLOGACAO : encaminharAvaliador (Analista STI)
 
     SOLICITADO_AJUSTES_HOMOLOGACAO --> AJUSTANDO_HOMOLOGACAO : iniciarAjuste
+
+    AGUARDANDO_AVALIADOR_HOMOLOGACAO --> FILA_HOMOLOGACAO_STI : devolverAnalista (Avaliador Técnico)
+    AGUARDANDO_AVALIADOR_HOMOLOGACAO --> AJUSTANDO_HOMOLOGACAO : solicitarAjustes (Avaliador Técnico)
 
     note right of FILA_HOMOLOGACAO_STI
         Agente IA analisa a solução entregue:
@@ -131,7 +153,7 @@ Atores: Gestor Unidade / Analista STI / Admin.
 
 ---
 
-## Estados — Lista Completa (23)
+## Estados — Lista Completa (25)
 
 ### Fase 1 — Solicitação
 | Estado | Descrição |
@@ -142,6 +164,8 @@ Atores: Gestor Unidade / Analista STI / Admin.
 | SOLICITANTE_AJUSTANDO | Solicitante editando após devolução |
 | VALIDADA_GESTOR | Gestor aprovou, aguarda envio à STI |
 | FILA_STI | Fila de análise da STI Governança |
+| AGUARDANDO_DPO | Demanda aguardando análise do DPO antes da STI (dados sensíveis) |
+| AGUARDANDO_AVALIADOR | Analista encaminhou ao Avaliador Técnico para revisão |
 | SOLICITADO_AJUSTES_STI | STI solicitou ajustes (volta ao Gestor) |
 | APROVADA_STI | Autorização para desenvolver emitida |
 | REPROVADA_STI | STI reprovou — terminal |
@@ -161,6 +185,8 @@ Atores: Gestor Unidade / Analista STI / Admin.
 | AJUSTANDO_HOMOLOGACAO | Solicitante corrigindo o produto |
 | VALIDADA_HOMOLOGACAO_GESTOR | Gestor aprovou produto |
 | FILA_HOMOLOGACAO_STI | Fila de homologação da STI Governança |
+| AGUARDANDO_DPO_HOMOLOGACAO | Produto aguardando homologação do DPO antes da STI (dados sensíveis) |
+| AGUARDANDO_AVALIADOR_HOMOLOGACAO | Analista encaminhou ao Avaliador Técnico para revisão (Hom.) |
 | SOLICITADO_AJUSTES_HOMOLOGACAO | STI solicitou ajustes no produto |
 | HOMOLOGADA | Produto aprovado para produção |
 
@@ -185,7 +211,9 @@ Atores: Gestor Unidade / Analista STI / Admin.
 | SOLICITANTE | Cria a demanda e desenvolve a solução | 1, 2, 3 |
 | GESTOR_UNIDADE | Valida solicitação e produto entregue | 1, 3 |
 | GESTOR_DEPARTAMENTO | Supervisão e relatórios | todas |
-| ANALISTA_STI | Governança — analisa viabilidade e homologa | 1, 3 |
+| ANALISTA_STI | Governança — analisa viabilidade e homologa; pode encaminhar ao Avaliador Técnico | 1, 3 |
+| AVALIADOR_TECNICO | Revisão superior — recebe encaminhamentos do Analista, pode devolver ao analista ou solicitar ajustes ao solicitante | 1, 3 |
+| DPO | Análise de conformidade LGPD para demandas com dados sensíveis | 1, 3 |
 | RESPONSAVEL_PRODUCAO | Ops STI — executa deploy | 4 |
 | GESTOR_SISTEMA | Admin total | todas |
 

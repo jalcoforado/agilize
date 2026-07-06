@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: agilize_db
       POSTGRES_USER: agilize_user
-      POSTGRES_PASSWORD: agilize123
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -38,15 +38,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Modo dev: usa o stage "deps" (todas as dependências, incl. tsx).
+      # A imagem "runtime" (produção) só tem deps de produção e roda dist/.
+      target: deps
     container_name: agilize_backend
+    env_file: .env
     environment:
+      # Sobrescreve apenas o que é diferente dentro do Docker
       - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=agilize_user
-      - DB_PASSWORD=agilize123
-      - DB_NAME=agilize_db
       - REDIS_HOST=redis
-      - PORT=3000
       - NODE_ENV=development
     ports:
       - "3000:3000"

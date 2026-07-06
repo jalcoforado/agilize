@@ -108,22 +108,41 @@ const GRUPOS_STI = [
   },
 ];
 
-const GRUPOS_DIRETOR = [
+const GRUPOS_AVALIADOR = [
   {
-    id: 'aguardando_diretor',
-    statuses: ['AGUARDANDO_DIRETOR'],
+    id: 'aguardando_avaliador',
+    statuses: ['AGUARDANDO_AVALIADOR'],
     titulo: 'Revisão solicitada — Análise de Viabilidade',
-    descricao: 'Demandas encaminhadas pelo analista para revisão do diretor STI (Fase 1).',
+    descricao: 'Demandas encaminhadas pelo analista para revisão do Avaliador Técnico (Fase 1).',
     icone: ShieldCheck,
     cor: { fundo: 'bg-violet-50', borda: 'border-violet-300', texto: 'text-violet-800', badge: 'bg-violet-100 text-violet-700', iconeBg: 'bg-violet-100', iconeTexto: 'text-violet-600' },
   },
   {
-    id: 'aguardando_diretor_homologacao',
-    statuses: ['AGUARDANDO_DIRETOR_HOMOLOGACAO'],
+    id: 'aguardando_avaliador_homologacao',
+    statuses: ['AGUARDANDO_AVALIADOR_HOMOLOGACAO'],
     titulo: 'Revisão solicitada — Homologação',
-    descricao: 'Demandas encaminhadas pelo analista para revisão do diretor STI (Fase 3).',
+    descricao: 'Demandas encaminhadas pelo analista para revisão do Avaliador Técnico (Fase 3).',
     icone: ShieldCheck,
     cor: { fundo: 'bg-fuchsia-50', borda: 'border-fuchsia-300', texto: 'text-fuchsia-800', badge: 'bg-fuchsia-100 text-fuchsia-700', iconeBg: 'bg-fuchsia-100', iconeTexto: 'text-fuchsia-600' },
+  },
+];
+
+const GRUPOS_DPO = [
+  {
+    id: 'aguardando_dpo',
+    statuses: ['AGUARDANDO_DPO'],
+    titulo: 'Análise DPO — Dados Sensíveis (Fase 1)',
+    descricao: 'Demandas encaminhadas ao DPO para verificação de conformidade com dados sensíveis.',
+    icone: ShieldCheck,
+    cor: { fundo: 'bg-amber-50', borda: 'border-amber-300', texto: 'text-amber-800', badge: 'bg-amber-100 text-amber-700', iconeBg: 'bg-amber-100', iconeTexto: 'text-amber-600' },
+  },
+  {
+    id: 'aguardando_dpo_homologacao',
+    statuses: ['AGUARDANDO_DPO_HOMOLOGACAO'],
+    titulo: 'Homologação DPO — Dados Sensíveis (Fase 3)',
+    descricao: 'Produtos encaminhados ao DPO para verificação antes da homologação STI.',
+    icone: ShieldCheck,
+    cor: { fundo: 'bg-amber-50', borda: 'border-amber-300', texto: 'text-amber-800', badge: 'bg-amber-100 text-amber-700', iconeBg: 'bg-amber-100', iconeTexto: 'text-amber-600' },
   },
 ];
 
@@ -148,23 +167,60 @@ const GRUPOS_OPS = [
   },
 ];
 
+const GRUPOS_DEPARTAMENTO = [
+  {
+    id: 'dept_fase1',
+    statuses: ['PENDENTE_GESTOR', 'DEVOLVIDA_AJUSTES', 'SOLICITANTE_AJUSTANDO', 'VALIDADA_GESTOR', 'FILA_STI', 'SOLICITADO_AJUSTES_STI', 'AGUARDANDO_AVALIADOR', 'AGUARDANDO_DPO'],
+    titulo: 'Fase 1 — Solicitação em andamento',
+    descricao: 'Demandas do departamento em tramitação na fase de solicitação.',
+    icone: ClipboardCheck,
+    cor: { fundo: 'bg-amber-50', borda: 'border-amber-300', texto: 'text-amber-800', badge: 'bg-amber-100 text-amber-700', iconeBg: 'bg-amber-100', iconeTexto: 'text-amber-600' },
+  },
+  {
+    id: 'dept_fase2',
+    statuses: ['APROVADA_STI', 'EM_DESENVOLVIMENTO'],
+    titulo: 'Fase 2 — Em desenvolvimento',
+    descricao: 'Demandas aprovadas sendo desenvolvidas pelas unidades do departamento.',
+    icone: Code2,
+    cor: { fundo: 'bg-orange-50', borda: 'border-orange-300', texto: 'text-orange-800', badge: 'bg-orange-100 text-orange-700', iconeBg: 'bg-orange-100', iconeTexto: 'text-orange-600' },
+  },
+  {
+    id: 'dept_fase3',
+    statuses: ['SUBMETIDO_HOMOLOGACAO', 'DEVOLVIDA_HOMOLOGACAO', 'AJUSTANDO_HOMOLOGACAO', 'VALIDADA_HOMOLOGACAO_GESTOR', 'FILA_HOMOLOGACAO_STI', 'AGUARDANDO_AVALIADOR_HOMOLOGACAO', 'AGUARDANDO_DPO_HOMOLOGACAO', 'SOLICITADO_AJUSTES_HOMOLOGACAO'],
+    titulo: 'Fase 3 — Homologação',
+    descricao: 'Produtos desenvolvidos em processo de homologação pela STI.',
+    icone: ShieldCheck,
+    cor: { fundo: 'bg-indigo-50', borda: 'border-indigo-300', texto: 'text-indigo-800', badge: 'bg-indigo-100 text-indigo-700', iconeBg: 'bg-indigo-100', iconeTexto: 'text-indigo-600' },
+  },
+  {
+    id: 'dept_fase4',
+    statuses: ['HOMOLOGADA', 'EM_PRODUCAO', 'EM_MONITORAMENTO'],
+    titulo: 'Fase 4 — Em produção',
+    descricao: 'Soluções homologadas implantadas ou em processo de implantação.',
+    icone: Rocket,
+    cor: { fundo: 'bg-green-50', borda: 'border-green-300', texto: 'text-green-800', badge: 'bg-green-100 text-green-700', iconeBg: 'bg-green-100', iconeTexto: 'text-green-600' },
+  },
+];
+
 function gruposPorPerfil(perfil) {
   if (perfil === 'SOLICITANTE')          return GRUPOS_SOLICITANTE;
   if (perfil === 'GESTOR_UNIDADE')       return GRUPOS_GESTOR;
-  if (perfil === 'GESTOR_DEPARTAMENTO')  return GRUPOS_GESTOR;
+  if (perfil === 'GESTOR_DEPARTAMENTO')  return GRUPOS_DEPARTAMENTO;
   if (perfil === 'ANALISTA_STI')         return GRUPOS_STI;
-  if (perfil === 'DIRETOR_STI')          return GRUPOS_DIRETOR;
+  if (perfil === 'AVALIADOR_TECNICO')    return GRUPOS_AVALIADOR;
+  if (perfil === 'DPO')                  return GRUPOS_DPO;
   if (perfil === 'RESPONSAVEL_PRODUCAO') return GRUPOS_OPS;
-  if (perfil === 'GESTOR_SISTEMA')       return [...GRUPOS_GESTOR, ...GRUPOS_STI, ...GRUPOS_DIRETOR, ...GRUPOS_OPS];
+  if (perfil === 'GESTOR_SISTEMA')       return [...GRUPOS_GESTOR, ...GRUPOS_STI, ...GRUPOS_AVALIADOR, ...GRUPOS_DPO, ...GRUPOS_OPS];
   return [];
 }
 
 const TITULO_POR_PERFIL = {
   SOLICITANTE:         'Minhas Ações Pendentes',
   GESTOR_UNIDADE:      'Fila de Ação',
-  GESTOR_DEPARTAMENTO: 'Fila de Ação',
+  GESTOR_DEPARTAMENTO: 'Visão do Departamento',
   ANALISTA_STI:        'Fila de Análise STI',
-  DIRETOR_STI:         'Fila de Revisão — Diretor STI',
+  AVALIADOR_TECNICO:   'Fila de Revisão — Avaliador Técnico',
+  DPO:                 'Fila de Ação — Análise LGPD',
   RESPONSAVEL_PRODUCAO:'Fila de Deploy',
   GESTOR_SISTEMA:      'Fila de Ação — Visão Global',
 };
@@ -174,7 +230,8 @@ const PERFIL_LABEL = {
   GESTOR_UNIDADE:      'Gestor de Unidade',
   GESTOR_DEPARTAMENTO: 'Gestor de Departamento',
   ANALISTA_STI:        'Analista STI',
-  DIRETOR_STI:         'Diretor STI',
+  AVALIADOR_TECNICO:   'Avaliador Técnico',
+  DPO:                 'DPO',
   RESPONSAVEL_PRODUCAO:'Operações STI',
   GESTOR_SISTEMA:      'Gestor do Sistema',
 };
@@ -225,14 +282,17 @@ function EmptyState() {
 }
 
 const GRUPOS_AVALIACAO_STI = ['fila_sti', 'fila_homologacao_sti'];
-const GRUPOS_AVALIACAO_DIRETOR = ['aguardando_diretor', 'aguardando_diretor_homologacao'];
+const GRUPOS_AVALIACAO_AVALIADOR = ['aguardando_avaliador', 'aguardando_avaliador_homologacao'];
+const GRUPOS_AVALIACAO_DPO = ['aguardando_dpo', 'aguardando_dpo_homologacao'];
 
 function LinhaDemanda({ demanda, navigate, grupoId }) {
   const urgencia = urgenciaCor(demanda.data_ultima_atualizacao, demanda.prioridade);
   const destino = GRUPOS_AVALIACAO_STI.includes(grupoId)
     ? `/avaliacao/${demanda.id_demanda}`
-    : GRUPOS_AVALIACAO_DIRETOR.includes(grupoId)
-    ? `/avaliacao-diretor/${demanda.id_demanda}`
+    : GRUPOS_AVALIACAO_AVALIADOR.includes(grupoId)
+    ? `/avaliacao-avaliador/${demanda.id_demanda}`
+    : GRUPOS_AVALIACAO_DPO.includes(grupoId)
+    ? `/avaliacao-dpo/${demanda.id_demanda}`
     : `/demanda/${demanda.id_demanda}`;
   return (
     <button
@@ -408,9 +468,13 @@ export default function ValidacaoPage() {
               {perfilLabel}
               {!carregando && ' · '}
               {!carregando && (
-                totalAcoes === 0
-                  ? 'Nenhuma demanda aguardando ação'
-                  : `${totalAcoes} demanda${totalAcoes > 1 ? 's' : ''} aguardando ação`
+                perfil === 'GESTOR_DEPARTAMENTO'
+                  ? totalAcoes === 0
+                    ? 'Nenhuma demanda ativa no departamento'
+                    : `${totalAcoes} demanda${totalAcoes > 1 ? 's' : ''} ativa${totalAcoes > 1 ? 's' : ''} no departamento`
+                  : totalAcoes === 0
+                    ? 'Nenhuma demanda aguardando ação'
+                    : `${totalAcoes} demanda${totalAcoes > 1 ? 's' : ''} aguardando ação`
               )}
             </p>
             {ultimaAtt && (
@@ -429,7 +493,7 @@ export default function ValidacaoPage() {
           </button>
         </div>
 
-        {!carregando && totalAcoes > 0 && (
+        {!carregando && totalAcoes > 0 && perfil !== 'GESTOR_DEPARTAMENTO' && (
           <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-5 text-sm">
             <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
             <span className="text-amber-800">

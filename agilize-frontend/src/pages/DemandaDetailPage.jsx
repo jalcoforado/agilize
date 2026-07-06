@@ -1,18 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { demandaService } from '../services/api';
+import { demandaService, usuarioService } from '../services/api';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
-import RichTextEditor from '../components/RichTextEditor';
+import FormParecer from '../components/FormParecer';
 import {
-  ArrowLeft, User, AlertTriangle, CheckCircle, XCircle,
+  ArrowLeft, AlertTriangle, CheckCircle, XCircle,
   Loader2, ChevronDown, ChevronUp, Server, Info,
-  RotateCcw, Clock, FileText, UserCheck, Shield,
+  RotateCcw, Clock, FileText, File, UserCheck, Shield, ShieldCheck,
   Code2, PackageCheck, Rocket, Activity, Ban, Pencil,
+  X, Download, Paperclip,
 } from 'lucide-react';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+
+const COR_AVATAR_HIST = {
+  GESTOR_SISTEMA:       'bg-gray-900 text-white',
+  AVALIADOR_TECNICO:    'bg-violet-100 text-violet-700',
+  ANALISTA_STI:         'bg-red-100 text-red-700',
+  DPO:                  'bg-pink-100 text-pink-800',
+  RESPONSAVEL_PRODUCAO: 'bg-green-100 text-green-700',
+  GESTOR_DEPARTAMENTO:  'bg-orange-100 text-orange-700',
+  GESTOR_UNIDADE:       'bg-amber-100 text-amber-700',
+  SOLICITANTE:          'bg-blue-100 text-blue-700',
+};
 
 const FASES = [
   { num: 1, label: 'Solicitação' },
@@ -22,38 +34,42 @@ const FASES = [
 ];
 
 function getFaseAtual(status) {
-  if (['DRAFT','PENDENTE_GESTOR','DEVOLVIDA_AJUSTES','SOLICITANTE_AJUSTANDO',
-       'VALIDADA_GESTOR','FILA_STI','AGUARDANDO_DIRETOR','APROVADA_STI',
-       'REPROVADA_STI','REJEITADA','SOLICITADO_AJUSTES_STI'].includes(status)) return 1;
-  if (['EM_DESENVOLVIMENTO','SUBMETIDO_HOMOLOGACAO'].includes(status)) return 2;
-  if (['DEVOLVIDA_HOMOLOGACAO','AJUSTANDO_HOMOLOGACAO','AGUARDANDO_DIRETOR_HOMOLOGACAO',
-       'VALIDADA_HOMOLOGACAO_GESTOR','FILA_HOMOLOGACAO_STI',
-       'SOLICITADO_AJUSTES_HOMOLOGACAO','HOMOLOGADA'].includes(status)) return 3;
-  if (['EM_PRODUCAO','EM_MONITORAMENTO','DESATIVADA'].includes(status)) return 4;
+  if (['DRAFT', 'PENDENTE_GESTOR', 'DEVOLVIDA_AJUSTES', 'SOLICITANTE_AJUSTANDO',
+    'VALIDADA_GESTOR', 'AGUARDANDO_DPO', 'FILA_STI', 'AGUARDANDO_AVALIADOR', 'APROVADA_STI',
+    'REPROVADA_STI', 'REJEITADA', 'SOLICITADO_AJUSTES_STI'].includes(status)) return 1;
+  if (['EM_DESENVOLVIMENTO', 'SUBMETIDO_HOMOLOGACAO', 'AJUSTANDO_HOMOLOGACAO'].includes(status)) return 2;
+  if (['DEVOLVIDA_HOMOLOGACAO', 'AGUARDANDO_AVALIADOR_HOMOLOGACAO',
+    'VALIDADA_HOMOLOGACAO_GESTOR', 'AGUARDANDO_DPO_HOMOLOGACAO', 'FILA_HOMOLOGACAO_STI',
+    'SOLICITADO_AJUSTES_HOMOLOGACAO', 'HOMOLOGADA'].includes(status)) return 3;
+  if (['EM_PRODUCAO', 'EM_MONITORAMENTO', 'DESATIVADA'].includes(status)) return 4;
   return 0;
 }
 
 const CANCELAVEIS = [
-  'DRAFT','PENDENTE_GESTOR','DEVOLVIDA_AJUSTES','SOLICITANTE_AJUSTANDO',
-  'VALIDADA_GESTOR','FILA_STI','SOLICITADO_AJUSTES_STI',
-  'APROVADA_STI','EM_DESENVOLVIMENTO','SUBMETIDO_HOMOLOGACAO',
+  'DRAFT', 'PENDENTE_GESTOR', 'DEVOLVIDA_AJUSTES', 'SOLICITANTE_AJUSTANDO',
+  'VALIDADA_GESTOR', 'FILA_STI', 'SOLICITADO_AJUSTES_STI',
+  'APROVADA_STI', 'EM_DESENVOLVIMENTO', 'SUBMETIDO_HOMOLOGACAO',
 ];
 
-function getAcoesDisponiveis(usuario, demanda) {
+function getAcoesDisponiveis(usuario, demanda, historico = []) {
   if (!demanda) return [];
   const s = demanda.status_atual;
+  const dpjHomFeito = historico.some(h => h.status_novo === 'AGUARDANDO_DPO_HOMOLOGACAO');
   const p = usuario.perfil_principal;
-  const ehDono    = Number(usuario.id_usuario) === Number(demanda.id_solicitante);
-  const ehGestor  = Number(usuario.id_usuario) === Number(demanda.id_gestor_unidade);
-  const isAdmin   = p === 'GESTOR_SISTEMA';
+  const todosPerfis = [p, ...(Array.isArray(usuario.perfis_secundarios) ? usuario.perfis_secundarios : [])];
+  const ehDono = Number(usuario.id_usuario) === Number(demanda.id_solicitante);
+  const ehGestor = todosPerfis.includes('GESTOR_UNIDADE');
+  const isAdmin = todosPerfis.includes('GESTOR_SISTEMA');
   const map = new Map();
   const add = (a) => { if (!map.has(a.id)) map.set(a.id, a); };
 
   // ── Solicitante ───────────────────────────────────────────────────────
-  if ((p === 'SOLICITANTE' && ehDono) || isAdmin) {
-    if (s === 'DRAFT')
-      add({ id: 'enviar-gestor', label: 'Enviar para Gestor', tipo: 'confirmar', variante: 'primary' });
-    if (s === 'DEVOLVIDA_AJUSTES')
+  if ((todosPerfis.includes('SOLICITANTE') && ehDono) || isAdmin) {
+    if (s === 'DRAFT') {
+      if (demanda.gestor_unidade_disponivel !== false)
+        add({ id: 'enviar-gestor', label: 'Enviar para Gestor', tipo: 'confirmar', variante: 'primary' });
+    }
+    if (s === 'DEVOLVIDA_AJUSTES' || s === 'SOLICITADO_AJUSTES_STI')
       add({ id: 'iniciar-ajuste', label: 'Iniciar Ajustes', tipo: 'confirmar', variante: 'warning' });
     if (s === 'SOLICITANTE_AJUSTANDO')
       add({ id: 'enviar-gestor', label: 'Reenviar para Gestor', tipo: 'confirmar', variante: 'primary' });
@@ -61,10 +77,10 @@ function getAcoesDisponiveis(usuario, demanda) {
       add({ id: 'iniciar-desenvolvimento', label: 'Iniciar Desenvolvimento', tipo: 'confirmar', variante: 'primary' });
     if (s === 'EM_DESENVOLVIMENTO')
       add({ id: 'submeter-produto', label: 'Submeter para Homologação', tipo: 'parecer', variante: 'primary' });
-    if (['DEVOLVIDA_HOMOLOGACAO','SOLICITADO_AJUSTES_HOMOLOGACAO'].includes(s))
+    if (['DEVOLVIDA_HOMOLOGACAO', 'SOLICITADO_AJUSTES_HOMOLOGACAO'].includes(s))
       add({ id: 'iniciar-ajuste-homologacao', label: 'Iniciar Ajustes (Hom.)', tipo: 'confirmar', variante: 'warning' });
     if (s === 'AJUSTANDO_HOMOLOGACAO')
-      add({ id: 'submeter-produto', label: 'Resubmeter para Homologação', tipo: 'parecer', variante: 'primary' });
+      add({ id: 'submeter-produto', label: 'Submeter para Homologação', tipo: 'parecer', variante: 'primary' });
     // Self-deploy
     if (demanda.tipo_deploy === 'SELF_DEPLOY') {
       if (s === 'HOMOLOGADA')
@@ -75,86 +91,129 @@ function getAcoesDisponiveis(usuario, demanda) {
   }
 
   // ── Gestor ────────────────────────────────────────────────────────────
-  if ((p === 'GESTOR_UNIDADE' && ehGestor) || isAdmin) {
+  if (ehGestor || isAdmin) {
     if (s === 'PENDENTE_GESTOR') {
-      add({ id: 'validar-gestor',  label: 'Validar',              tipo: 'parecer',  variante: 'success' });
-      add({ id: 'devolver',        label: 'Devolver p/ Ajustes',  tipo: 'parecer',  variante: 'warning' });
-      add({ id: 'rejeitar-gestor', label: 'Rejeitar',             tipo: 'rejeicao', variante: 'danger'  });
+      add({ id: 'validar-gestor', label: 'Validar', tipo: 'parecer', variante: 'success' });
+      add({ id: 'devolver', label: 'Devolver p/ Ajustes', tipo: 'parecer', variante: 'warning' });
+      add({ id: 'rejeitar-gestor', label: 'Rejeitar', tipo: 'rejeicao', variante: 'danger' });
     }
-    if (s === 'VALIDADA_GESTOR')
+    if (s === 'VALIDADA_GESTOR' && !demanda.dados_sensiveis)
       add({ id: 'enviar-sti', label: 'Encaminhar para STI', tipo: 'confirmar', variante: 'primary' });
-    if (s === 'SOLICITADO_AJUSTES_STI')
-      add({ id: 'reenviar-sti', label: 'Reenviar para STI', tipo: 'confirmar', variante: 'primary' });
+    if (s === 'VALIDADA_GESTOR' && demanda.dados_sensiveis)
+      add({ id: 'enviar-sti', label: 'Encaminhar para análise LGPD', tipo: 'confirmar', variante: 'primary' });
     if (s === 'SUBMETIDO_HOMOLOGACAO') {
-      add({ id: 'validar-homologacao-gestor', label: 'Validar Produto',      tipo: 'parecer',  variante: 'success' });
-      add({ id: 'devolver-homologacao',       label: 'Devolver p/ Ajustes',  tipo: 'parecer',  variante: 'warning' });
+      add({ id: 'validar-homologacao-gestor', label: 'Validar Produto', tipo: 'parecer', variante: 'success' });
+      add({ id: 'devolver-homologacao', label: 'Devolver p/ Ajustes', tipo: 'parecer', variante: 'warning' });
     }
-    if (s === 'VALIDADA_HOMOLOGACAO_GESTOR')
+    if (s === 'VALIDADA_HOMOLOGACAO_GESTOR' && (!demanda.dados_sensiveis || dpjHomFeito))
       add({ id: 'enviar-homologacao-sti', label: 'Enviar para STI (Hom.)', tipo: 'confirmar', variante: 'primary' });
-    if (s === 'SOLICITADO_AJUSTES_HOMOLOGACAO')
-      add({ id: 'reenviar-homologacao-sti', label: 'Reenviar para STI (Hom.)', tipo: 'confirmar', variante: 'primary' });
+    if (s === 'VALIDADA_HOMOLOGACAO_GESTOR' && demanda.dados_sensiveis && !dpjHomFeito)
+      add({ id: 'enviar-homologacao-sti', label: 'Encaminhar para análise LGPD (Hom.)', tipo: 'confirmar', variante: 'primary' });
   }
 
   // ── Analista STI ──────────────────────────────────────────────────────
-  if (p === 'ANALISTA_STI' || isAdmin) {
+  if (todosPerfis.includes('ANALISTA_STI') || isAdmin) {
     if (s === 'FILA_STI') {
-      add({ id: 'aprovar-sti',           label: 'Aprovar Viabilidade', tipo: 'parecer',  variante: 'success' });
-      add({ id: 'solicitar-ajustes-sti', label: 'Solicitar Ajustes',  tipo: 'parecer',  variante: 'warning' });
-      add({ id: 'reprovar-sti',          label: 'Reprovar',            tipo: 'rejeicao', variante: 'danger'  });
+      add({ id: 'aprovar-sti', label: 'Aprovar Viabilidade', tipo: 'parecer', variante: 'success' });
+      add({ id: 'solicitar-ajustes-sti', label: 'Solicitar Ajustes', tipo: 'parecer', variante: 'warning' });
+      add({ id: 'reprovar-sti', label: 'Reprovar', tipo: 'rejeicao', variante: 'danger' });
+      add({ id: 'encaminhar-avaliador', label: 'Encaminhar ao Avaliador Técnico', tipo: 'encaminhar-avaliador', variante: 'primary' });
     }
     if (s === 'FILA_HOMOLOGACAO_STI') {
-      add({ id: 'homologar',                    label: 'Homologar',           tipo: 'homologar', variante: 'success' });
-      add({ id: 'solicitar-ajustes-homologacao',label: 'Solicitar Ajustes',   tipo: 'parecer',   variante: 'warning' });
-      add({ id: 'rejeitar-homologacao',         label: 'Rejeitar Produto',    tipo: 'rejeicao',  variante: 'danger'  });
+      add({ id: 'homologar', label: 'Homologar', tipo: 'homologar', variante: 'success' });
+      add({ id: 'solicitar-ajustes-homologacao', label: 'Solicitar Ajustes', tipo: 'parecer', variante: 'warning' });
+      add({ id: 'rejeitar-homologacao', label: 'Rejeitar Produto', tipo: 'rejeicao', variante: 'danger' });
+      add({ id: 'encaminhar-avaliador-hom', label: 'Encaminhar ao Avaliador Técnico', tipo: 'encaminhar-avaliador', variante: 'primary' });
     }
   }
 
-  // ── Ops / STI — deploy ────────────────────────────────────────────────
-  const podeDeployOps = p === 'RESPONSAVEL_PRODUCAO' || p === 'ANALISTA_STI' || isAdmin;
-  if (podeDeployOps) {
-    if (s === 'HOMOLOGADA')
-      add({ id: 'iniciar-deploy',   label: 'Iniciar Deploy',   tipo: 'parecer', variante: 'primary' });
-    if (s === 'EM_PRODUCAO')
-      add({ id: 'confirmar-deploy', label: 'Confirmar Deploy', tipo: 'parecer', variante: 'success' });
-    if (s === 'EM_MONITORAMENTO')
-      add({ id: 'desativar', label: 'Desativar Solução', tipo: 'motivo', variante: 'danger' });
+  // ── Avaliador Técnico ─────────────────────────────────────────────────
+  const ehAvaliador = todosPerfis.includes('AVALIADOR_TECNICO');
+  const ehAvaliadorFase1 = ehAvaliador && s === 'AGUARDANDO_AVALIADOR' &&
+    demanda.id_unidade_avaliador && Number(demanda.id_unidade_avaliador) === Number(usuario.id_unidade);
+  const ehAvaliadorFase3 = ehAvaliador && s === 'AGUARDANDO_AVALIADOR_HOMOLOGACAO' &&
+    demanda.id_unidade_avaliador && Number(demanda.id_unidade_avaliador) === Number(usuario.id_unidade);
+
+  if ((ehAvaliadorFase1 || ehAvaliadorFase3) || isAdmin) {
+    if (ehAvaliadorFase1 || (isAdmin && s === 'AGUARDANDO_AVALIADOR')) {
+      add({ id: 'avaliador-solicitar-ajustes', label: 'Solicitar Ajustes ao Solicitante', tipo: 'parecer', variante: 'warning' });
+      add({ id: 'avaliador-devolver-analista', label: 'Devolver ao Analista', tipo: 'parecer', variante: 'primary' });
+    }
+    if (ehAvaliadorFase3 || (isAdmin && s === 'AGUARDANDO_AVALIADOR_HOMOLOGACAO')) {
+      add({ id: 'avaliador-solicitar-ajustes', label: 'Solicitar Ajustes ao Solicitante', tipo: 'parecer', variante: 'warning' });
+      add({ id: 'avaliador-devolver-analista', label: 'Devolver ao Analista (Hom.)', tipo: 'parecer', variante: 'primary' });
+    }
   }
 
+  // ── DPO ──────────────────────────────────────────────────────────────
+  if (p === 'DPO' || isAdmin) {
+    if (s === 'AGUARDANDO_DPO') {
+      add({ id: 'dpo-aprovar', label: 'Encaminhar para STI', tipo: 'parecer', variante: 'success' });
+      add({ id: 'dpo-solicitar-ajustes', label: 'Solicitar Ajustes', tipo: 'parecer', variante: 'warning' });
+    }
+    if (s === 'AGUARDANDO_DPO_HOMOLOGACAO') {
+      add({ id: 'dpo-aprovar', label: 'Encaminhar para Homologação STI', tipo: 'parecer', variante: 'success' });
+      add({ id: 'dpo-solicitar-ajustes', label: 'Solicitar Ajustes', tipo: 'parecer', variante: 'warning' });
+    }
+  }
+
+  // ── Ops / STI — deploy (por unidade STI, não por pessoa) ─────────────
+  const podeDeployOps = isAdmin || (
+    demanda.tipo_deploy === 'OPS_DEPLOY' &&
+    demanda.id_unidade_producao &&
+    Number(demanda.id_unidade_producao) === Number(usuario.id_unidade) &&
+    todosPerfis.some(p => ['RESPONSAVEL_PRODUCAO', 'ANALISTA_STI'].includes(p))
+  );
+  if (podeDeployOps) {
+    if (s === 'HOMOLOGADA')
+      add({ id: 'iniciar-deploy', label: 'Iniciar Deploy', tipo: 'parecer', variante: 'primary' });
+    if (s === 'EM_PRODUCAO')
+      add({ id: 'confirmar-deploy', label: 'Confirmar Deploy', tipo: 'parecer', variante: 'success' });
+  }
+  if ((todosPerfis.some(p => ['ANALISTA_STI', 'RESPONSAVEL_PRODUCAO'].includes(p)) || isAdmin) && s === 'EM_MONITORAMENTO')
+    add({ id: 'desativar', label: 'Desativar Solução', tipo: 'motivo', variante: 'danger' });
+
   // ── Cancelamento ─────────────────────────────────────────────────────
-  const podeCancelar = ['SOLICITANTE','GESTOR_UNIDADE','ANALISTA_STI','GESTOR_SISTEMA'];
-  if (podeCancelar.includes(p) && CANCELAVEIS.includes(s))
+  const podeCancelar = ['SOLICITANTE', 'GESTOR_UNIDADE', 'ANALISTA_STI'];
+  if ((todosPerfis.some(pf => podeCancelar.includes(pf)) || isAdmin) && CANCELAVEIS.includes(s))
     add({ id: 'cancelar', label: 'Cancelar Demanda', tipo: 'motivo', variante: 'danger' });
 
   return [...map.values()];
 }
 
-async function executarAcao(idDemanda, acaoId, { parecer, comentario, motivo, tipo_deploy }) {
+async function executarAcao(idDemanda, acaoId, { parecer, comentario, motivo, tipo_deploy, id_unidade_producao, id_unidade_avaliador, anexos }) {
   switch (acaoId) {
-    case 'enviar-gestor':               return demandaService.enviarParaGestor(idDemanda);
-    case 'iniciar-ajuste':              return demandaService.iniciarAjuste(idDemanda);
-    case 'validar-gestor':              return demandaService.validarGestor(idDemanda, parecer, comentario);
-    case 'devolver':                    return demandaService.devolver(idDemanda, parecer, comentario);
-    case 'rejeitar':                    return demandaService.rejeitar(idDemanda, motivo, parecer);
-    case 'rejeitar-gestor':             return demandaService.rejeitarGestor(idDemanda, motivo, parecer);
-    case 'enviar-sti':                  return demandaService.enviarParaSTI(idDemanda);
-    case 'aprovar-sti':                 return demandaService.aprovarSTI(idDemanda, parecer, comentario);
-    case 'reprovar-sti':                return demandaService.reprovarSTI(idDemanda, motivo, parecer);
-    case 'solicitar-ajustes-sti':       return demandaService.solicitarAjustesSTI(idDemanda, parecer, comentario);
-    case 'reenviar-sti':                return demandaService.reenviarParaSTI(idDemanda);
-    case 'iniciar-desenvolvimento':     return demandaService.iniciarDesenvolvimento(idDemanda);
-    case 'submeter-produto':            return demandaService.submeterProduto(idDemanda, parecer, comentario);
-    case 'validar-homologacao-gestor':  return demandaService.validarHomologacaoGestor(idDemanda, parecer, comentario);
-    case 'devolver-homologacao':        return demandaService.devolverHomologacao(idDemanda, parecer, comentario);
-    case 'iniciar-ajuste-homologacao':  return demandaService.iniciarAjusteHomologacao(idDemanda);
-    case 'enviar-homologacao-sti':      return demandaService.enviarHomologacaoSTI(idDemanda);
-    case 'solicitar-ajustes-homologacao': return demandaService.solicitarAjustesHomologacao(idDemanda, parecer, comentario);
-    case 'homologar':                   return demandaService.homologar(idDemanda, parecer, comentario, tipo_deploy);
-    case 'rejeitar-homologacao':        return demandaService.rejeitarHomologacao(idDemanda, motivo, parecer);
-    case 'reenviar-homologacao-sti':    return demandaService.reenviarHomologacaoSTI(idDemanda);
-    case 'iniciar-deploy':              return demandaService.iniciarDeploy(idDemanda, parecer);
-    case 'confirmar-deploy':            return demandaService.confirmarDeploy(idDemanda, parecer);
-    case 'desativar':                   return demandaService.desativar(idDemanda, motivo);
-    case 'cancelar':                    return demandaService.cancelar(idDemanda, motivo);
+    case 'enviar-gestor': return demandaService.enviarParaGestor(idDemanda);
+    case 'iniciar-ajuste': return demandaService.iniciarAjuste(idDemanda);
+    case 'validar-gestor': return demandaService.validarGestor(idDemanda, parecer, comentario, anexos);
+    case 'devolver': return demandaService.devolver(idDemanda, parecer, comentario, anexos);
+    case 'rejeitar': return demandaService.rejeitar(idDemanda, motivo, parecer, anexos);
+    case 'rejeitar-gestor': return demandaService.rejeitarGestor(idDemanda, motivo, parecer, anexos);
+    case 'enviar-sti': return demandaService.enviarParaSTI(idDemanda);
+    case 'aprovar-sti': return demandaService.aprovarSTI(idDemanda, parecer, comentario, anexos);
+    case 'reprovar-sti': return demandaService.reprovarSTI(idDemanda, motivo, parecer, anexos);
+    case 'solicitar-ajustes-sti': return demandaService.solicitarAjustesSTI(idDemanda, parecer, comentario, anexos);
+    case 'reenviar-sti': return demandaService.reenviarParaSTI(idDemanda);
+    case 'dpo-aprovar': return demandaService.dpoAprovar(idDemanda, parecer, comentario, anexos);
+    case 'dpo-solicitar-ajustes': return demandaService.dpoSolicitarAjustes(idDemanda, parecer, comentario, anexos);
+    case 'iniciar-desenvolvimento': return demandaService.iniciarDesenvolvimento(idDemanda);
+    case 'submeter-produto': return demandaService.submeterProduto(idDemanda, parecer, comentario, anexos);
+    case 'validar-homologacao-gestor': return demandaService.validarHomologacaoGestor(idDemanda, parecer, comentario, anexos);
+    case 'devolver-homologacao': return demandaService.devolverHomologacao(idDemanda, parecer, comentario, anexos);
+    case 'iniciar-ajuste-homologacao': return demandaService.iniciarAjusteHomologacao(idDemanda);
+    case 'enviar-homologacao-sti': return demandaService.enviarHomologacaoSTI(idDemanda);
+    case 'solicitar-ajustes-homologacao': return demandaService.solicitarAjustesHomologacao(idDemanda, parecer, comentario, anexos);
+    case 'homologar': return demandaService.homologar(idDemanda, parecer, comentario, tipo_deploy, id_unidade_producao, anexos);
+    case 'rejeitar-homologacao': return demandaService.rejeitarHomologacao(idDemanda, motivo, parecer, anexos);
+    case 'reenviar-homologacao-sti': return demandaService.reenviarHomologacaoSTI(idDemanda);
+    case 'iniciar-deploy': return demandaService.iniciarDeploy(idDemanda, parecer, anexos);
+    case 'confirmar-deploy': return demandaService.confirmarDeploy(idDemanda, parecer, anexos);
+    case 'desativar': return demandaService.desativar(idDemanda, motivo);
+    case 'encaminhar-avaliador': return demandaService.encaminharAvaliador(idDemanda, id_unidade_avaliador, comentario);
+    case 'encaminhar-avaliador-hom': return demandaService.encaminharAvaliador(idDemanda, id_unidade_avaliador, comentario);
+    case 'avaliador-solicitar-ajustes': return demandaService.avaliadorSolicitarAjustes(idDemanda, parecer, comentario, anexos);
+    case 'avaliador-devolver-analista': return demandaService.avaliadorDevolverAnalista(idDemanda, parecer, comentario, anexos);
+    case 'cancelar': return demandaService.cancelar(idDemanda, motivo);
     default: throw new Error(`Ação desconhecida: ${acaoId}`);
   }
 }
@@ -164,11 +223,12 @@ async function executarAcao(idDemanda, acaoId, { parecer, comentario, motivo, ti
 const STATUS_IDX = {
   DRAFT: 0,
   PENDENTE_GESTOR: 1, DEVOLVIDA_AJUSTES: 1.5, SOLICITANTE_AJUSTANDO: 1.8,
-  VALIDADA_GESTOR: 2, FILA_STI: 3, AGUARDANDO_DIRETOR: 3.3, SOLICITADO_AJUSTES_STI: 3.5,
+  VALIDADA_GESTOR: 2, AGUARDANDO_DPO: 2.5, FILA_STI: 3, AGUARDANDO_AVALIADOR: 3.3, SOLICITADO_AJUSTES_STI: 3.5,
   APROVADA_STI: 4,
   EM_DESENVOLVIMENTO: 5,
-  SUBMETIDO_HOMOLOGACAO: 6, DEVOLVIDA_HOMOLOGACAO: 6.5, AJUSTANDO_HOMOLOGACAO: 6.8,
-  VALIDADA_HOMOLOGACAO_GESTOR: 7, FILA_HOMOLOGACAO_STI: 8, AGUARDANDO_DIRETOR_HOMOLOGACAO: 8.2, SOLICITADO_AJUSTES_HOMOLOGACAO: 8.5,
+  SUBMETIDO_HOMOLOGACAO: 6, DEVOLVIDA_HOMOLOGACAO: 6.5,
+  AJUSTANDO_HOMOLOGACAO: 5,
+  VALIDADA_HOMOLOGACAO_GESTOR: 7, AGUARDANDO_DPO_HOMOLOGACAO: 7.5, FILA_HOMOLOGACAO_STI: 8, AGUARDANDO_AVALIADOR_HOMOLOGACAO: 8.2, SOLICITADO_AJUSTES_HOMOLOGACAO: 8.5,
   HOMOLOGADA: 9,
   EM_PRODUCAO: 10,
   EM_MONITORAMENTO: 11,
@@ -178,44 +238,58 @@ const STATUS_IDX = {
 
 const PASSOS_TIMELINE = [
   {
-    id: 'criacao',  label: 'Criação',                atorLabel: 'Solicitante',       icon: FileText,
-    activeIdx: 0,   doneIdx: 1,
+    id: 'criacao', label: 'Criação', atorLabel: 'Solicitante', icon: FileText,
+    activeIdx: 0, doneIdx: 1,
     eventoHistorico: null,
   },
   {
-    id: 'gestor1',  label: 'Análise do Gestor',       atorLabel: 'Gestor da Unidade', icon: UserCheck,
-    activeIdx: 1,   doneIdx: 2,
+    id: 'gestor1', label: 'Análise do Gestor', atorLabel: 'Gestor da Unidade', icon: UserCheck,
+    activeIdx: 1, doneIdx: 2,
     eventoHistorico: 'VALIDADA_GESTOR',
     eventoRetorno: ['DEVOLVIDA_AJUSTES'],
     terminalStatus: 'REJEITADA',
   },
   {
-    id: 'sti1',     label: 'Viabilidade STI',         atorLabel: 'Analista STI',      icon: Shield,
-    activeIdx: 3,   doneIdx: 4,
+    id: 'dpo1', label: 'Análise DPO', atorLabel: 'DPO', icon: ShieldCheck,
+    activeIdx: 2.5, doneIdx: 3,
+    eventoHistorico: 'FILA_STI',
+    eventoRetornoFiltro: { status_anterior: 'AGUARDANDO_DPO', tipo_acao: 'DPO_SOLICITAR_AJUSTES' },
+    _dpoCampo: 'id_dpo',
+  },
+  {
+    id: 'sti1', label: 'Viabilidade STI', atorLabel: 'Analista STI', icon: Shield,
+    activeIdx: 3, doneIdx: 4,
     eventoHistorico: 'APROVADA_STI',
     eventoRetorno: ['SOLICITADO_AJUSTES_STI'],
     terminalStatus: 'REPROVADA_STI',
   },
   {
-    id: 'dev',      label: 'Desenvolvimento',         atorLabel: 'Solicitante',       icon: Code2,
-    activeIdx: 5,   doneIdx: 6,
+    id: 'dev', label: 'Desenvolvimento', atorLabel: 'Solicitante', icon: Code2,
+    activeIdx: 5, doneIdx: 6,
     eventoHistorico: 'SUBMETIDO_HOMOLOGACAO',
   },
   {
-    id: 'gestor2',  label: 'Validação (Hom.)',         atorLabel: 'Gestor da Unidade', icon: PackageCheck,
-    activeIdx: 6,   doneIdx: 7,
+    id: 'gestor2', label: 'Homologação do Gestor', atorLabel: 'Gestor da Unidade', icon: PackageCheck,
+    activeIdx: 6, doneIdx: 7,
     eventoHistorico: 'VALIDADA_HOMOLOGACAO_GESTOR',
     eventoRetorno: ['DEVOLVIDA_HOMOLOGACAO'],
   },
   {
-    id: 'sti2',     label: 'Homologação STI',          atorLabel: 'Analista STI',      icon: Shield,
-    activeIdx: 8,   doneIdx: 9,
+    id: 'dpo2', label: 'Homologação DPO', atorLabel: 'DPO', icon: ShieldCheck,
+    activeIdx: 7.5, doneIdx: 8,
+    eventoHistorico: 'FILA_HOMOLOGACAO_STI',
+    eventoRetornoFiltro: { status_anterior: 'AGUARDANDO_DPO_HOMOLOGACAO', tipo_acao: 'DPO_SOLICITAR_AJUSTES' },
+    _dpoCampo: 'id_dpo_homologacao',
+  },
+  {
+    id: 'sti2', label: 'Homologação STI', atorLabel: 'Analista STI', icon: Shield,
+    activeIdx: 8, doneIdx: 9,
     eventoHistorico: 'HOMOLOGADA',
     eventoRetorno: ['SOLICITADO_AJUSTES_HOMOLOGACAO'],
   },
   {
-    id: 'producao', label: 'Em Produção',              atorLabel: 'Ops / Solicitante', icon: Rocket,
-    activeIdx: 10,  doneIdx: 11,
+    id: 'producao', label: 'Em Produção', atorLabel: 'Ops / Solicitante', icon: Rocket,
+    activeIdx: 10, doneIdx: 11,
     eventoHistorico: 'EM_MONITORAMENTO',
   },
 ];
@@ -226,7 +300,15 @@ function computarPassos(demanda, historico) {
   const isCancelada = status === 'CANCELADA';
   const isTerminal = idx < 0;
 
-  return PASSOS_TIMELINE.map(passo => {
+  const dpoPorCampo = (campo) =>
+    demanda.dados_sensiveis === true ||
+    historico.some(h => h.status_novo === (campo === 'id_dpo' ? 'AGUARDANDO_DPO' : 'AGUARDANDO_DPO_HOMOLOGACAO'));
+
+  const passosFiltrados = PASSOS_TIMELINE.filter(p =>
+    !p._dpoCampo || dpoPorCampo(p._dpoCampo)
+  );
+
+  return passosFiltrados.map(passo => {
     // Estado do nó
     let estado;
     if (idx >= passo.doneIdx) {
@@ -255,7 +337,12 @@ function computarPassos(demanda, historico) {
       : null;
 
     // Contagem de retornos/ajustes neste passo
-    const retornos = passo.eventoRetorno
+    const retornos = passo.eventoRetornoFiltro
+      ? historico.filter(h =>
+          h.status_anterior === passo.eventoRetornoFiltro.status_anterior &&
+          h.tipo_acao === passo.eventoRetornoFiltro.tipo_acao
+        ).length
+      : passo.eventoRetorno
       ? historico.filter(h => passo.eventoRetorno.includes(h.status_novo)).length
       : 0;
 
@@ -280,8 +367,9 @@ const STATUS_LABEL_ATIVO = {
   DEVOLVIDA_AJUSTES: 'Devolvida p/ ajustes',
   SOLICITANTE_AJUSTANDO: 'Ajustes em andamento',
   VALIDADA_GESTOR: 'Validado, enviando à STI',
+  AGUARDANDO_DPO: 'Aguardando análise do DPO',
   FILA_STI: 'Na fila da STI',
-  AGUARDANDO_DIRETOR: 'Aguardando parecer do Diretor STI',
+  AGUARDANDO_AVALIADOR: 'Aguardando parecer do Avaliador Técnico',
   SOLICITADO_AJUSTES_STI: 'STI solicitou ajustes',
   APROVADA_STI: 'Aprovada, iniciando dev.',
   EM_DESENVOLVIMENTO: 'Em desenvolvimento',
@@ -289,8 +377,9 @@ const STATUS_LABEL_ATIVO = {
   DEVOLVIDA_HOMOLOGACAO: 'Devolvida p/ ajustes',
   AJUSTANDO_HOMOLOGACAO: 'Ajustes em andamento',
   VALIDADA_HOMOLOGACAO_GESTOR: 'Validado, aguardando STI',
+  AGUARDANDO_DPO_HOMOLOGACAO: 'Aguardando análise do DPO',
   FILA_HOMOLOGACAO_STI: 'Na fila STI (hom.)',
-  AGUARDANDO_DIRETOR_HOMOLOGACAO: 'Aguardando parecer do Diretor STI (hom.)',
+  AGUARDANDO_AVALIADOR_HOMOLOGACAO: 'Aguardando parecer do Avaliador Técnico (hom.)',
   SOLICITADO_AJUSTES_HOMOLOGACAO: 'STI solicitou ajustes',
   HOMOLOGADA: 'Aguardando deploy',
   EM_PRODUCAO: 'Deploy em andamento',
@@ -300,11 +389,11 @@ function PassoTimeline({ passo, isLast }) {
   const Icone = passo.icon;
 
   const nodeStyle = {
-    done:      'bg-emerald-500 border-emerald-500 text-white',
-    active:    'bg-tce-700 border-tce-700 text-white',
-    error:     'bg-red-500 border-red-500 text-white',
+    done: 'bg-emerald-500 border-emerald-500 text-white',
+    active: 'bg-tce-700 border-tce-700 text-white',
+    error: 'bg-red-500 border-red-500 text-white',
     cancelled: 'bg-neutral-300 border-neutral-300 text-white',
-    pending:   'bg-white border-neutral-200 text-neutral-300',
+    pending: 'bg-white border-neutral-200 text-neutral-300',
   }[passo.estado] || 'bg-white border-neutral-200 text-neutral-300';
 
   const lineStyle = passo.estado === 'done' ? 'bg-emerald-200' : 'bg-neutral-100';
@@ -316,11 +405,11 @@ function PassoTimeline({ passo, isLast }) {
       {/* Linha + nó */}
       <div className="flex flex-col items-center shrink-0" style={{ width: 28 }}>
         <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0 ${nodeStyle} ${passo.estado === 'active' ? 'ring-2 ring-tce-300 ring-offset-1' : ''}`}>
-          {passo.estado === 'done'      && <CheckCircle size={13} />}
-          {passo.estado === 'active'    && <Loader2 size={12} className="animate-spin" />}
-          {passo.estado === 'error'     && <XCircle size={13} />}
+          {passo.estado === 'done' && <CheckCircle size={13} />}
+          {passo.estado === 'active' && <Loader2 size={12} className="animate-spin" />}
+          {passo.estado === 'error' && <XCircle size={13} />}
           {passo.estado === 'cancelled' && <Ban size={12} />}
-          {passo.estado === 'pending'   && <Icone size={12} />}
+          {passo.estado === 'pending' && <Icone size={12} />}
         </div>
         {!isLast && <div className={`w-px flex-1 mt-1 ${lineStyle}`} style={{ minHeight: 20 }} />}
       </div>
@@ -328,12 +417,11 @@ function PassoTimeline({ passo, isLast }) {
       {/* Conteúdo */}
       <div className={`pb-4 flex-1 min-w-0 ${isLast ? '' : ''}`}>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-xs font-semibold ${
-            passo.estado === 'done'    ? 'text-neutral-700'
-            : passo.estado === 'active' ? 'text-tce-700'
-            : passo.estado === 'error'  ? 'text-red-600'
-            : 'text-neutral-400'
-          }`}>
+          <span className={`text-xs font-semibold ${passo.estado === 'done' ? 'text-neutral-700'
+              : passo.estado === 'active' ? 'text-tce-700'
+                : passo.estado === 'error' ? 'text-red-600'
+                  : 'text-neutral-400'
+            }`}>
             {passo.label}
           </span>
           {passo.retornos > 0 && (
@@ -403,7 +491,7 @@ function TimelineProcesso({ demanda, historico }) {
 function FaseIndicador({ status }) {
   const fase = getFaseAtual(status);
   const cancelado = status === 'CANCELADA';
-  const terminal = ['REPROVADA_STI','REJEITADA','DESATIVADA'].includes(status);
+  const terminal = ['REPROVADA_STI', 'REJEITADA', 'DESATIVADA'].includes(status);
 
   if (cancelado || terminal) {
     return (
@@ -420,11 +508,10 @@ function FaseIndicador({ status }) {
     <div className="flex items-center gap-1">
       {FASES.map((f, i) => (
         <div key={f.num} className="flex items-center gap-1">
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-            f.num === fase  ? 'bg-tce-700 text-white'
-            : f.num < fase  ? 'bg-tce-100 text-tce-600'
-                            : 'bg-neutral-100 text-neutral-400'
-          }`}>
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${f.num === fase ? 'bg-tce-700 text-white'
+              : f.num < fase ? 'bg-tce-100 text-tce-600'
+                : 'bg-neutral-100 text-neutral-400'
+            }`}>
             {f.num < fase && <CheckCircle size={10} />}
             {f.label}
           </div>
@@ -442,7 +529,7 @@ function BotaoAcao({ acao, onClick }) {
     primary: 'bg-tce-700 hover:bg-tce-800 text-white',
     success: 'bg-emerald-600 hover:bg-emerald-700 text-white',
     warning: 'bg-amber-500 hover:bg-amber-600 text-white',
-    danger:  'border border-red-300 text-red-600 hover:bg-red-50',
+    danger: 'border border-red-300 text-red-600 hover:bg-red-50',
   }[acao.variante] || 'bg-neutral-600 text-white';
 
   return (
@@ -463,41 +550,179 @@ function InfoLinha({ label, value }) {
   );
 }
 
-function HistoricoItem({ item }) {
+// ─── Helpers para arquivos no histórico ──────────────────────────────────────
+
+const HIST_EXT = {
+  pdf:  { label: 'PDF',  cor: 'text-red-500',     fundo: 'bg-red-50 border-red-200'          },
+  doc:  { label: 'DOC',  cor: 'text-blue-600',    fundo: 'bg-blue-50 border-blue-200'        },
+  docx: { label: 'DOCX', cor: 'text-blue-600',    fundo: 'bg-blue-50 border-blue-200'        },
+  xls:  { label: 'XLS',  cor: 'text-emerald-600', fundo: 'bg-emerald-50 border-emerald-200'  },
+  xlsx: { label: 'XLSX', cor: 'text-emerald-600', fundo: 'bg-emerald-50 border-emerald-200'  },
+  ppt:  { label: 'PPT',  cor: 'text-orange-500',  fundo: 'bg-orange-50 border-orange-200'    },
+  pptx: { label: 'PPTX', cor: 'text-orange-500',  fundo: 'bg-orange-50 border-orange-200'    },
+  txt:  { label: 'TXT',  cor: 'text-neutral-500', fundo: 'bg-neutral-100 border-neutral-200' },
+  csv:  { label: 'CSV',  cor: 'text-teal-600',    fundo: 'bg-teal-50 border-teal-200'        },
+};
+const HIST_TIPOS_DOC = ['pdf', 'doc', 'docx', 'txt', 'ppt', 'pptx', 'csv'];
+
+function histExt(nome) { return nome.split('.').pop()?.toLowerCase() || ''; }
+function histCfg(nome) {
+  const ext = histExt(nome);
+  return HIST_EXT[ext] || { label: ext.toUpperCase() || 'ARQ', cor: 'text-neutral-400', fundo: 'bg-neutral-50 border-neutral-200' };
+}
+function fmtBytes(b) {
+  if (b < 1024)      return `${b} B`;
+  if (b < 1_048_576) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1_048_576).toFixed(1)} MB`;
+}
+
+// ─── Item do histórico ────────────────────────────────────────────────────────
+
+function HistoricoItem({ item, anexosSolicitacao, onRemoverAnexo }) {
+  const [imgExpandida, setImgExpandida] = useState(null);
+
   const dt = new Date(item.data_hora);
   const dtFmt = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  // Fecha lightbox com ESC
+  useEffect(() => {
+    if (!imgExpandida) return;
+    const onKey = (e) => { if (e.key === 'Escape') setImgExpandida(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [imgExpandida]);
+
+  const handleParecerClick = (e) => {
+    if (e.target.tagName === 'IMG') setImgExpandida(e.target.src);
+  };
+
   return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center shrink-0">
-        <div className="w-7 h-7 rounded-full bg-tce-100 text-tce-600 flex items-center justify-center">
-          <User size={13} />
+    <>
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center shrink-0">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold tracking-tight select-none ${COR_AVATAR_HIST[item.perfil_usuario] || 'bg-tce-100 text-tce-600'}`}>
+            {(item.nome_usuario || '?').split(' ').filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('')}
+          </div>
+          <div className="w-px flex-1 bg-neutral-100 mt-1" />
         </div>
-        <div className="w-px flex-1 bg-neutral-100 mt-1" />
+        <div className="pb-5 flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-neutral-700">{item.nome_usuario}</span>
+            <span className="text-[11px] text-neutral-400">{item.perfil_usuario?.replace('_', ' ')}</span>
+            <span className="text-[11px] text-neutral-300 ml-auto">{dtFmt}</span>
+          </div>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {item.status_anterior && <><StatusBadge status={item.status_anterior} /><span className="text-neutral-300 text-xs">→</span></>}
+            <StatusBadge status={item.status_novo} />
+          </div>
+
+          {/* Parecer — imagens clicáveis para ampliar */}
+          {item.parecer && (
+            <div
+              className="mt-2 text-sm text-neutral-600 bg-neutral-50 rounded-lg px-3 py-2 border border-neutral-100 leading-relaxed rich-text-content rich-text-history"
+              dangerouslySetInnerHTML={{ __html: item.parecer }}
+              onClick={handleParecerClick}
+            />
+          )}
+
+          {/* Documentos anexados */}
+          {item.anexos?.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {item.anexos.map((anexo, i) => {
+                const { label: extLabel, cor, fundo } = histCfg(anexo.nome);
+                const ext = histExt(anexo.nome);
+                const TipoIcone = HIST_TIPOS_DOC.includes(ext) ? FileText : File;
+                return (
+                  <a
+                    key={i}
+                    href={anexo.url}
+                    download={anexo.nome}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2.5 bg-white border border-neutral-200 rounded-lg px-3 py-2 hover:border-tce-300 hover:bg-tce-50 transition group"
+                  >
+                    <TipoIcone size={14} className={`${cor} shrink-0`} />
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wide shrink-0 ${cor} ${fundo}`}>
+                      {extLabel}
+                    </span>
+                    <p className="flex-1 text-xs font-medium text-neutral-700 truncate min-w-0" title={anexo.nome}>
+                      {anexo.nome}
+                    </p>
+                    {anexo.tamanho && (
+                      <span className="text-[11px] text-neutral-400 shrink-0 tabular-nums">{fmtBytes(anexo.tamanho)}</span>
+                    )}
+                    <Download size={12} className="text-neutral-300 group-hover:text-tce-600 transition shrink-0" />
+                  </a>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Documentos da solicitação (injetados no primeiro evento) */}
+          {anexosSolicitacao?.length > 0 && (
+            <div className="mt-2 space-y-1">
+              <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Paperclip size={10} />Documentos da solicitação
+              </p>
+              {anexosSolicitacao.map((a, i) => {
+                const { label: extLbl, cor, fundo } = histCfg(a.nome);
+                const ext = histExt(a.nome);
+                const TipoIcone = HIST_TIPOS_DOC.includes(ext) ? FileText : File;
+                return (
+                  <div key={i} className="flex items-center gap-2.5 bg-white border border-neutral-200 rounded-lg px-3 py-2 hover:border-tce-300 hover:bg-tce-50 transition group">
+                    <a href={a.conteudo} download={a.nome} className="flex items-center gap-2.5 flex-1 min-w-0">
+                      <TipoIcone size={14} className={`${cor} shrink-0`} />
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wide shrink-0 ${cor} ${fundo}`}>{extLbl}</span>
+                      <p className="flex-1 text-xs font-medium text-neutral-700 truncate min-w-0" title={a.nome}>{a.nome}</p>
+                      {a.tamanho && <span className="text-[11px] text-neutral-400 shrink-0 tabular-nums">{fmtBytes(a.tamanho)}</span>}
+                      <Download size={12} className="text-neutral-300 group-hover:text-tce-600 transition shrink-0" />
+                    </a>
+                    {onRemoverAnexo && (
+                      <button type="button" onClick={() => onRemoverAnexo(i)}
+                        title="Remover documento"
+                        className="ml-1 text-neutral-300 hover:text-red-500 transition shrink-0 opacity-0 group-hover:opacity-100">
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {item.comentario && <p className="mt-1 text-xs text-neutral-400 italic">{item.comentario}</p>}
+          {item.motivo_rejeicao && (
+            <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+              <AlertTriangle size={11} /> {item.motivo_rejeicao}
+            </p>
+          )}
+        </div>
       </div>
-      <div className="pb-5 flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-neutral-700">{item.nome_usuario}</span>
-          <span className="text-[11px] text-neutral-400">{item.perfil_usuario?.replace('_', ' ')}</span>
-          <span className="text-[11px] text-neutral-300 ml-auto">{dtFmt}</span>
-        </div>
-        <div className="flex items-center gap-2 mt-1 flex-wrap">
-          {item.status_anterior && <><StatusBadge status={item.status_anterior} /><span className="text-neutral-300 text-xs">→</span></>}
-          <StatusBadge status={item.status_novo} />
-        </div>
-        {item.parecer && (
-          <div
-            className="mt-2 text-sm text-neutral-600 bg-neutral-50 rounded-lg px-3 py-2 border border-neutral-100 leading-relaxed rich-text-content"
-            dangerouslySetInnerHTML={{ __html: item.parecer }}
+
+      {/* Lightbox */}
+      {imgExpandida && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+          onClick={() => setImgExpandida(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setImgExpandida(null)}
+            className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition"
+          >
+            <X size={18} />
+          </button>
+          <img
+            src={imgExpandida}
+            alt="Imagem ampliada"
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           />
-        )}
-        {item.comentario && <p className="mt-1 text-xs text-neutral-400 italic">{item.comentario}</p>}
-        {item.motivo_rejeicao && (
-          <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-            <AlertTriangle size={11}/> {item.motivo_rejeicao}
-          </p>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -532,7 +757,7 @@ function DadosTecnicos({ demanda }) {
       <button onClick={() => setAberto(a => !a)}
         className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-neutral-50 transition">
         <h2 className="text-sm font-semibold text-neutral-700">Configuração técnica</h2>
-        {aberto ? <ChevronUp size={16} className="text-neutral-400"/> : <ChevronDown size={16} className="text-neutral-400"/>}
+        {aberto ? <ChevronUp size={16} className="text-neutral-400" /> : <ChevronDown size={16} className="text-neutral-400" />}
       </button>
       {aberto && (
         <div className="px-5 pb-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-neutral-100 pt-4">
@@ -572,7 +797,7 @@ function Dependencias({ demanda }) {
       <button onClick={() => setAberto(a => !a)}
         className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-neutral-50 transition">
         <h2 className="text-sm font-semibold text-neutral-700">Dependências externas</h2>
-        {aberto ? <ChevronUp size={16} className="text-neutral-400"/> : <ChevronDown size={16} className="text-neutral-400"/>}
+        {aberto ? <ChevronUp size={16} className="text-neutral-400" /> : <ChevronDown size={16} className="text-neutral-400" />}
       </button>
       {aberto && (
         <div className="px-5 pb-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-neutral-100 pt-4">
@@ -588,32 +813,96 @@ function Dependencias({ demanda }) {
 
 // ─── Modal de ação ─────────────────────────────────────────────────────────
 
+const LEGENDA_PADRAO = {
+  'submeter-produto':           'Demanda submetida para homologação.',
+  'validar-gestor':             'Solicitação validada pelo gestor da unidade.',
+  'validar-homologacao-gestor': 'Produto validado pelo gestor da unidade.',
+  'aprovar-sti':                'Viabilidade aprovada pela STI.',
+  'homologar':                  'Produto homologado pela STI.',
+  'dpo-aprovar':                'Análise LGPD concluída. Demanda encaminhada.',
+  'rejeitar-gestor':            'Demanda rejeitada pelo gestor da unidade.',
+  'reprovar-sti':               'Demanda reprovada pela STI.',
+  'rejeitar-homologacao':       'Produto rejeitado pela STI na fase de homologação.',
+  'iniciar-deploy':             'Iniciado o processo de deploy em produção.',
+  'confirmar-deploy':           'Deploy confirmado. Solução em produção.',
+};
+
 function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
-  const [parecer, setParecer]         = useState('');
-  const [parecerText, setParecerText] = useState('');
-  const [comentario, setComentario]   = useState('');
-  const [motivo, setMotivo]           = useState('');
-  const [tipoDeploy, setTipoDeploy]   = useState('');
-  const [erro, setErro]               = useState('');
+  const defaultParecer = LEGENDA_PADRAO[acao.id] ?? '';
+  const [parecer, setParecer] = useState(defaultParecer ? `<p>${defaultParecer}</p>` : '');
+  const [parecerText, setParecerText] = useState(defaultParecer);
+  const [comentario, setComentario] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [tipoDeploy, setTipoDeploy] = useState('');
+  const [anexos, setAnexos] = useState([]);
+  const [unidadesProducao, setUnidadesProducao]               = useState([]);
+  const [loadingUnidades, setLoadingUnidades]                 = useState(false);
+  const [unidadeSelecionada, setUnidadeSelecionada]           = useState('');
+  const [erroUnidades, setErroUnidades]                       = useState('');
+  const [unidadesAvaliador, setUnidadesAvaliador]             = useState([]);
+  const [loadingUnidadesAv, setLoadingUnidadesAv]             = useState(false);
+  const [unidadeAvaliadorSelecionada, setUnidadeAvaliadorSelecionada] = useState('');
+  const [erroUnidadesAv, setErroUnidadesAv]                   = useState('');
+  const [erro, setErro] = useState('');
 
   const ic = `w-full px-3.5 py-2.5 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-tce-500 focus:border-tce-500 transition`;
 
-  const handleConfirmar = () => {
-    if (acao.tipo === 'parecer' && parecerText.trim().length < 20) {
-      setErro('O parecer precisa ter pelo menos 20 caracteres'); return;
+  useEffect(() => {
+    if (acao.tipo === 'encaminhar-avaliador' && unidadesAvaliador.length === 0) {
+      setLoadingUnidadesAv(true);
+      setErroUnidadesAv('');
+      usuarioService.listarUnidadesAvaliadores()
+        .then(({ data }) => setUnidadesAvaliador(data.unidades || []))
+        .catch(() => setErroUnidadesAv('Não foi possível carregar as unidades.'))
+        .finally(() => setLoadingUnidadesAv(false));
     }
+  }, [acao.tipo]);
+
+  const handleTipoDeploy = async (valor) => {
+    setTipoDeploy(valor);
+    setUnidadeSelecionada('');
+    if (valor === 'OPS_DEPLOY' && unidadesProducao.length === 0) {
+      setLoadingUnidades(true);
+      setErroUnidades('');
+      try {
+        const { data } = await usuarioService.listarUnidadesProducao();
+        setUnidadesProducao(data.unidades || []);
+      } catch {
+        setErroUnidades('Não foi possível carregar as unidades de produção.');
+      } finally {
+        setLoadingUnidades(false);
+      }
+    }
+  };
+
+  const handleConfirmar = () => {
     if (acao.tipo === 'rejeicao') {
       if (!motivo.trim()) { setErro('Informe o motivo'); return; }
+      if (parecerText.trim().length < 20) { setErro('O parecer precisa ter pelo menos 20 caracteres'); return; }
+    }
+    if (acao.tipo === 'parecer') {
       if (parecerText.trim().length < 20) { setErro('O parecer precisa ter pelo menos 20 caracteres'); return; }
     }
     if (acao.tipo === 'homologar') {
       if (parecerText.trim().length < 20) { setErro('O parecer precisa ter pelo menos 20 caracteres'); return; }
       if (!tipoDeploy) { setErro('Defina o tipo de deploy'); return; }
+      if (tipoDeploy === 'OPS_DEPLOY' && !unidadeSelecionada) {
+        setErro('Selecione a unidade de produção STI'); return;
+      }
+    }
+    if (acao.tipo === 'encaminhar-avaliador' && !unidadeAvaliadorSelecionada) {
+      setErro('Selecione a unidade do Avaliador Técnico'); return;
     }
     if (acao.tipo === 'motivo' && !motivo.trim()) {
       setErro('Informe o motivo'); return;
     }
-    onConfirmar({ parecer, comentario, motivo, tipo_deploy: tipoDeploy });
+    onConfirmar({
+      parecer, comentario, motivo,
+      tipo_deploy: tipoDeploy,
+      id_unidade_producao: tipoDeploy === 'OPS_DEPLOY' ? unidadeSelecionada : null,
+      id_unidade_avaliador: acao.tipo === 'encaminhar-avaliador' ? unidadeAvaliadorSelecionada : null,
+      anexos,
+    });
   };
 
   return (
@@ -638,19 +927,19 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
         )}
 
         {(acao.tipo === 'parecer' || acao.tipo === 'rejeicao' || acao.tipo === 'homologar') && (
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-              Parecer <span className="text-red-500">*</span>
-              <span className="font-normal text-neutral-400 ml-1">(mín. 20 caracteres)</span>
-            </label>
-            <RichTextEditor
-              value={parecer}
-              onChange={setParecer}
-              onTextChange={setParecerText}
-              minRows={4}
-              placeholder="Descreva sua análise ou decisão..."
-            />
-          </div>
+          <FormParecer
+            parecer={parecer}
+            onParecerChange={setParecer}
+            onTextChange={setParecerText}
+            comentario={comentario}
+            onComentarioChange={setComentario}
+            onAnexosChange={setAnexos}
+            showComentario={acao.tipo !== 'rejeicao'}
+            minRows={4}
+            placeholder="Descreva sua análise ou decisão..."
+            label="Parecer"
+            defaultText={defaultParecer}
+          />
         )}
 
         {acao.tipo === 'homologar' && (
@@ -661,14 +950,13 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
             <div className="grid grid-cols-2 gap-2">
               {[
                 { value: 'SELF_DEPLOY', label: 'Self-deploy', desc: 'O solicitante faz o deploy', icon: '👤' },
-                { value: 'OPS_DEPLOY',  label: 'Ops / Infra',  desc: 'Equipe de Operações faz', icon: '🏗️'  },
+                { value: 'OPS_DEPLOY', label: 'Ops / Infra', desc: 'Equipe de Operações faz', icon: '🏗️' },
               ].map(opt => (
-                <button key={opt.value} type="button" onClick={() => setTipoDeploy(opt.value)}
-                  className={`text-left rounded-lg border-2 p-2.5 transition-all ${
-                    tipoDeploy === opt.value
+                <button key={opt.value} type="button" onClick={() => handleTipoDeploy(opt.value)}
+                  className={`text-left rounded-lg border-2 p-2.5 transition-all ${tipoDeploy === opt.value
                       ? 'border-tce-500 bg-tce-50'
                       : 'border-neutral-200 hover:border-neutral-300'
-                  }`}>
+                    }`}>
                   <p className="text-sm font-semibold text-neutral-700">{opt.icon} {opt.label}</p>
                   <p className="text-[11px] text-neutral-400 mt-0.5">{opt.desc}</p>
                 </button>
@@ -677,19 +965,68 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
           </div>
         )}
 
-        {(acao.tipo === 'parecer' || acao.tipo === 'homologar') && (
+        {acao.tipo === 'homologar' && tipoDeploy === 'OPS_DEPLOY' && (
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-              Comentário adicional <span className="text-neutral-400 font-normal">(opcional)</span>
+              Unidade de produção STI <span className="text-red-500">*</span>
             </label>
-            <textarea className={ic + ' resize-none'} rows={2} value={comentario}
-              onChange={e => setComentario(e.target.value)} placeholder="Observações internas..." />
+            {loadingUnidades ? (
+              <div className="flex items-center gap-2 py-2 text-sm text-neutral-400">
+                <Loader2 size={14} className="animate-spin" /> Carregando unidades...
+              </div>
+            ) : erroUnidades ? (
+              <p className="text-sm text-red-500 flex items-center gap-1.5">
+                <AlertTriangle size={13} />{erroUnidades}
+              </p>
+            ) : (
+              <select
+                value={unidadeSelecionada}
+                onChange={e => setUnidadeSelecionada(e.target.value)}
+                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-500"
+              >
+                <option value="">Selecione a unidade...</option>
+                {unidadesProducao.map(u => (
+                  <option key={u.id_unidade} value={u.id_unidade}>{u.sigla} — {u.nome_unidade}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        {acao.tipo === 'encaminhar-avaliador' && (
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+              Unidade do Avaliador Técnico <span className="text-red-500">*</span>
+            </label>
+            {loadingUnidadesAv ? (
+              <div className="flex items-center gap-2 py-2 text-sm text-neutral-400">
+                <Loader2 size={14} className="animate-spin" /> Carregando unidades...
+              </div>
+            ) : erroUnidadesAv ? (
+              <p className="text-sm text-red-500 flex items-center gap-1.5">
+                <AlertTriangle size={13} />{erroUnidadesAv}
+              </p>
+            ) : (
+              <select
+                value={unidadeAvaliadorSelecionada}
+                onChange={e => setUnidadeAvaliadorSelecionada(e.target.value)}
+                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-500"
+              >
+                <option value="">Selecione a unidade...</option>
+                {unidadesAvaliador.map(u => (
+                  <option key={u.id_unidade} value={u.id_unidade}>{u.sigla} — {u.nome_unidade}</option>
+                ))}
+              </select>
+            )}
+            <p className="text-[11px] text-violet-600 mt-1.5">
+              Todos os Avaliadores Técnicos da unidade selecionada poderão analisar a demanda.
+            </p>
           </div>
         )}
 
         {erro && (
           <p className="text-sm text-red-600 flex items-center gap-1.5">
-            <AlertTriangle size={13}/>{erro}
+            <AlertTriangle size={13} />{erro}
           </p>
         )}
 
@@ -700,7 +1037,7 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
           </button>
           <button onClick={handleConfirmar} disabled={executando}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold bg-tce-700 text-white rounded-lg hover:bg-tce-800 transition disabled:opacity-50">
-            {executando && <Loader2 size={13} className="animate-spin"/>}
+            {executando && <Loader2 size={13} className="animate-spin" />}
             {executando ? 'Aguarde...' : 'Confirmar'}
           </button>
         </div>
@@ -717,9 +1054,13 @@ const fmtDt = (d) => d
 
 const PRIORIDADE_CLS = {
   CRITICA: 'bg-red-100 text-red-700',
-  ALTA:    'bg-orange-100 text-orange-700',
-  MEDIA:   'bg-yellow-100 text-yellow-700',
-  BAIXA:   'bg-green-100 text-green-700',
+  ALTA: 'bg-orange-100 text-orange-700',
+  MEDIA: 'bg-yellow-100 text-yellow-700',
+  BAIXA: 'bg-green-100 text-green-700',
+};
+
+const PRIORIDADE_LABEL = {
+  CRITICA: 'Crítica', ALTA: 'Alta', MEDIA: 'Média', BAIXA: 'Baixa',
 };
 
 const TIPO_SOLUCAO_LABEL = {
@@ -732,16 +1073,18 @@ export default function DemandaDetailPage() {
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
 
-  const [demanda,   setDemanda]   = useState(null);
+  const [demanda, setDemanda] = useState(null);
   const [historico, setHistorico] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [erroGeral,  setErroGeral]  = useState('');
-  const [sucesso,    setSucesso]    = useState('');
-  const [acaoAtiva,  setAcaoAtiva]  = useState(null);
+  const [erroGeral, setErroGeral] = useState('');
+  const [erroStatus, setErroStatus] = useState(null);
+  const [sucesso, setSucesso] = useState('');
+  const [acaoAtiva, setAcaoAtiva] = useState(null);
   const [executando, setExecutando] = useState(false);
 
   const carregar = useCallback(async () => {
     setErroGeral('');
+    setErroStatus(null);
     try {
       const [{ data: d }, { data: h }] = await Promise.all([
         demandaService.obter(id),
@@ -750,6 +1093,7 @@ export default function DemandaDetailPage() {
       setDemanda(d.demanda);
       setHistorico(h.historico || []);
     } catch (err) {
+      setErroStatus(err.response?.status ?? null);
       setErroGeral(err.response?.data?.message || 'Erro ao carregar a demanda');
     } finally {
       setCarregando(false);
@@ -757,6 +1101,20 @@ export default function DemandaDetailPage() {
   }, [id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const podeEditarAnexos =
+    ['DRAFT', 'SOLICITANTE_AJUSTANDO'].includes(demanda?.status_atual) &&
+    Number(usuario.id_usuario) === Number(demanda?.id_solicitante);
+
+  const handleRemoverAnexo = async (idx) => {
+    const novos = (demanda.anexos || []).filter((_, i) => i !== idx);
+    try {
+      const { data } = await demandaService.atualizarAnexos(id, novos);
+      setDemanda(data.demanda);
+    } catch {
+      setErroGeral('Erro ao remover o documento.');
+    }
+  };
 
   const handleAcao = async (dados) => {
     setExecutando(true);
@@ -785,19 +1143,30 @@ export default function DemandaDetailPage() {
   }
 
   if (!demanda) {
+    const acesso403 = erroStatus === 403;
     return (
       <Layout>
         <div className="max-w-lg mx-auto mt-16 text-center">
-          <Info size={40} className="text-neutral-300 mx-auto mb-3" />
-          <p className="text-neutral-500">Demanda não encontrada.</p>
+          {acesso403
+            ? <XCircle size={40} className="text-red-300 mx-auto mb-3" />
+            : <Info size={40} className="text-neutral-300 mx-auto mb-3" />
+          }
+          <p className="font-semibold text-neutral-700 mb-1">
+            {acesso403 ? 'Acesso negado' : 'Demanda não encontrada'}
+          </p>
+          <p className="text-sm text-neutral-500">
+            {acesso403
+              ? 'Você não tem permissão para visualizar esta demanda.'
+              : 'Esta demanda não existe ou foi removida.'}
+          </p>
           <button onClick={() => navigate('/dashboard')}
-            className="mt-4 text-sm text-tce-600 hover:underline">Voltar ao dashboard</button>
+            className="mt-5 text-sm text-tce-600 hover:underline">Voltar ao dashboard</button>
         </div>
       </Layout>
     );
   }
 
-  const acoes = getAcoesDisponiveis(usuario, demanda);
+  const acoes = getAcoesDisponiveis(usuario, demanda, historico);
 
   return (
     <Layout>
@@ -807,7 +1176,7 @@ export default function DemandaDetailPage() {
         <div className="flex items-start gap-3 mb-6">
           <button onClick={() => navigate('/dashboard')}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition mt-1">
-            <ArrowLeft size={20}/>
+            <ArrowLeft size={20} />
           </button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -825,25 +1194,33 @@ export default function DemandaDetailPage() {
             </div>
           </div>
           {['DRAFT', 'SOLICITANTE_AJUSTANDO'].includes(demanda.status_atual) &&
-           (Number(usuario.id_usuario) === Number(demanda.id_solicitante) || usuario.perfil_principal === 'GESTOR_SISTEMA') && (
-            <button onClick={() => navigate(`/demanda/${id}/editar`)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-tce-700 border border-tce-300 rounded-lg hover:bg-tce-50 transition mt-1 shrink-0">
-              <Pencil size={14}/>
-              Editar
-            </button>
-          )}
+            Number(usuario.id_usuario) === Number(demanda.id_solicitante) && (
+              <button onClick={() => navigate(`/demanda/${id}/editar`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-tce-700 border border-tce-300 rounded-lg hover:bg-tce-50 transition mt-1 shrink-0">
+                <Pencil size={14} />
+                Editar
+              </button>
+            )}
         </div>
 
         {/* Alertas */}
         {erroGeral && (
           <div className="mb-4 flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-            <AlertTriangle size={15} className="mt-0.5 shrink-0"/>
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" />
             {erroGeral}
+          </div>
+        )}
+        {demanda.status_atual === 'DRAFT' && demanda.gestor_unidade_disponivel === false && (
+          <div className="mb-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
+            <span>
+              <strong>Sem gestor ativo na unidade.</strong> Esta demanda não pode ser enviada ao gestor enquanto a unidade <em>{demanda.nome_unidade}</em> não tiver um gestor designado e ativo. Entre em contato com o administrador do sistema.
+            </span>
           </div>
         )}
         {sucesso && (
           <div className="mb-4 flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700">
-            <CheckCircle size={15} className="shrink-0"/>
+            <CheckCircle size={15} className="shrink-0" />
             {sucesso}
           </div>
         )}
@@ -855,7 +1232,7 @@ export default function DemandaDetailPage() {
               Ações disponíveis para você
             </p>
             <div className="flex flex-wrap gap-2">
-              {acoes.map(a => <BotaoAcao key={a.id} acao={a} onClick={setAcaoAtiva}/>)}
+              {acoes.map(a => <BotaoAcao key={a.id} acao={a} onClick={setAcaoAtiva} />)}
             </div>
           </div>
         )}
@@ -892,9 +1269,50 @@ export default function DemandaDetailPage() {
             {/* Histórico */}
             <div className="bg-white rounded-xl border border-neutral-200 p-5">
               <h2 className="text-sm font-semibold text-neutral-700 mb-4">Histórico de tramitação</h2>
-              {historico.length === 0
-                ? <p className="text-sm text-neutral-400 text-center py-4">Nenhum registro ainda</p>
-                : historico.map(item => <HistoricoItem key={item.id_historico} item={item}/>)
+              {historico.length === 0 && (
+                <>
+                  <p className="text-sm text-neutral-400 text-center py-4">Nenhum registro ainda</p>
+                  {/* Documentos anexados no rascunho antes de qualquer envio */}
+                  {(demanda.anexos?.length > 0) && (
+                    <div className="border-t border-neutral-100 pt-4 space-y-1.5">
+                      <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Paperclip size={10} />Documentos da solicitação
+                      </p>
+                      {demanda.anexos.map((a, i) => {
+                        const { label: extLbl, cor, fundo } = histCfg(a.nome);
+                        const ext = histExt(a.nome);
+                        const TipoIcone = HIST_TIPOS_DOC.includes(ext) ? FileText : File;
+                        return (
+                          <div key={i} className="flex items-center gap-2.5 bg-white border border-neutral-200 rounded-lg px-3 py-2 hover:border-tce-300 hover:bg-tce-50 transition group">
+                            <a href={a.conteudo} download={a.nome} className="flex items-center gap-2.5 flex-1 min-w-0">
+                              <TipoIcone size={14} className={`${cor} shrink-0`} />
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wide shrink-0 ${cor} ${fundo}`}>{extLbl}</span>
+                              <p className="flex-1 text-xs font-medium text-neutral-700 truncate min-w-0" title={a.nome}>{a.nome}</p>
+                              {a.tamanho && <span className="text-[11px] text-neutral-400 shrink-0 tabular-nums">{fmtBytes(a.tamanho)}</span>}
+                              <Download size={12} className="text-neutral-300 group-hover:text-tce-600 transition shrink-0" />
+                            </a>
+                            {podeEditarAnexos && (
+                              <button type="button" onClick={() => handleRemoverAnexo(i)}
+                                title="Remover documento"
+                                className="ml-1 text-neutral-300 hover:text-red-500 transition shrink-0 opacity-0 group-hover:opacity-100">
+                                <X size={13} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+              {historico.length > 0 && historico.map((item, idx) => (
+                    <HistoricoItem
+                      key={item.id_historico}
+                      item={item}
+                      anexosSolicitacao={idx === historico.length - 1 ? (demanda.anexos || []) : undefined}
+                      onRemoverAnexo={idx === historico.length - 1 && podeEditarAnexos ? handleRemoverAnexo : undefined}
+                    />
+                  ))
               }
             </div>
           </div>
@@ -903,32 +1321,66 @@ export default function DemandaDetailPage() {
           <div className="space-y-4">
             <div className="bg-white rounded-xl border border-neutral-200 p-5 space-y-3.5">
               <h2 className="text-sm font-semibold text-neutral-700">Informações</h2>
-              <InfoLinha label="Tipo de solução"   value={TIPO_SOLUCAO_LABEL[demanda.tipo_solucao] || demanda.tipo_solucao} />
-              <InfoLinha label="Solicitante"        value={demanda.nome_solicitante} />
-              <InfoLinha label="Unidade"            value={demanda.nome_unidade} />
-              <InfoLinha label="Departamento"       value={demanda.nome_departamento} />
-              {demanda.publico_alvo && <InfoLinha label="Público-alvo" value={demanda.publico_alvo}/>}
-              {demanda.frequencia_uso && <InfoLinha label="Frequência de uso" value={demanda.frequencia_uso}/>}
+              <InfoLinha label="Tipo de solução" value={TIPO_SOLUCAO_LABEL[demanda.tipo_solucao] || demanda.tipo_solucao} />
+              <InfoLinha label="Solicitante" value={demanda.nome_solicitante} />
+              <InfoLinha label="Unidade" value={demanda.nome_unidade} />
+              <InfoLinha label="Departamento" value={demanda.nome_departamento} />
+              {demanda.publico_alvo && <InfoLinha label="Público-alvo" value={demanda.publico_alvo} />}
+              {demanda.frequencia_uso && <InfoLinha label="Frequência de uso" value={demanda.frequencia_uso} />}
               {demanda.quantidade_usuarios_estimada && (
-                <InfoLinha label="Usuários estimados" value={String(demanda.quantidade_usuarios_estimada)}/>
+                <InfoLinha label="Usuários estimados" value={String(demanda.quantidade_usuarios_estimada)} />
+              )}
+
+              {demanda.solucao_em_uso != null && (
+                <div>
+                  <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Solução em uso</p>
+                  <span className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-full mt-0.5 ${
+                    demanda.solucao_em_uso ? 'bg-amber-100 text-amber-700' : 'bg-neutral-100 text-neutral-500'
+                  }`}>
+                    {demanda.solucao_em_uso ? 'Sim' : 'Não'}
+                  </span>
+                </div>
+              )}
+
+              {demanda.dados_sensiveis != null && (
+                <div>
+                  <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Dados sensíveis</p>
+                  <span className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-full mt-0.5 ${
+                    demanda.dados_sensiveis ? 'bg-red-100 text-red-700' : 'bg-neutral-100 text-neutral-500'
+                  }`}>
+                    {demanda.dados_sensiveis ? 'Sim' : 'Não'}
+                  </span>
+                  {demanda.dados_sensiveis && demanda.dados_sensiveis_desc && (
+                    <p className="text-xs text-neutral-500 mt-0.5">{demanda.dados_sensiveis_desc}</p>
+                  )}
+                </div>
+              )}
+
+              {demanda.impacta_outras_areas != null && (
+                <div>
+                  <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Impacta outras áreas</p>
+                  <span className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-full mt-0.5 ${
+                    demanda.impacta_outras_areas ? 'bg-amber-100 text-amber-700' : 'bg-neutral-100 text-neutral-500'
+                  }`}>
+                    {demanda.impacta_outras_areas ? 'Sim' : 'Não'}
+                  </span>
+                  {demanda.impacta_outras_areas && demanda.areas_impactadas && (
+                    <p className="text-xs text-neutral-500 mt-0.5">{demanda.areas_impactadas}</p>
+                  )}
+                </div>
+              )}
+
+              {demanda.tipo_solucao !== 'AGENTE_IA' && demanda.usa_ia_desenvolvimento != null && (
+                <div>
+                  <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Usa IA no desenvolvimento</p>
+                  <span className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-full mt-0.5 ${
+                    demanda.usa_ia_desenvolvimento ? 'bg-indigo-100 text-indigo-700' : 'bg-neutral-100 text-neutral-500'
+                  }`}>
+                    {demanda.usa_ia_desenvolvimento ? 'Sim' : 'Não'}
+                  </span>
+                </div>
               )}
             </div>
-
-            <TimelineProcesso demanda={demanda} historico={historico} />
-
-            {demanda.tipo_deploy && (
-              <div className="bg-white rounded-xl border border-neutral-200 px-5 py-3.5">
-                <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">Tipo de deploy</p>
-                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
-                  demanda.tipo_deploy === 'SELF_DEPLOY'
-                    ? 'bg-tce-100 text-tce-700'
-                    : 'bg-indigo-100 text-indigo-700'
-                }`}>
-                  <Server size={10}/>
-                  {demanda.tipo_deploy === 'SELF_DEPLOY' ? 'Self-deploy (Solicitante)' : 'Ops / Infra'}
-                </span>
-              </div>
-            )}
 
             {(demanda.investimento_estimado || demanda.tempo_estimado_horas) && (
               <div className="bg-white rounded-xl border border-neutral-200 p-5 space-y-3.5">
@@ -939,6 +1391,25 @@ export default function DemandaDetailPage() {
                 )}
                 {demanda.tempo_estimado_horas && (
                   <InfoLinha label="Horas de desenvolvimento" value={`${demanda.tempo_estimado_horas}h`} />
+                )}
+              </div>
+            )}
+
+            <TimelineProcesso demanda={demanda} historico={historico} />
+
+            {demanda.tipo_deploy && (
+              <div className="bg-white rounded-xl border border-neutral-200 px-5 py-3.5">
+                <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">Tipo de deploy</p>
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
+                  demanda.tipo_deploy === 'SELF_DEPLOY' ? 'bg-tce-100 text-tce-700' : 'bg-indigo-100 text-indigo-700'
+                }`}>
+                  <Server size={10} />
+                  {demanda.tipo_deploy === 'SELF_DEPLOY' ? 'Self-deploy (Solicitante)' : 'Ops / Infra'}
+                </span>
+                {demanda.nome_unidade_producao && (
+                  <p className="text-xs text-neutral-500 mt-1.5">
+                    Unidade: <span className="font-medium text-neutral-700">{demanda.nome_unidade_producao}</span>
+                  </p>
                 )}
               </div>
             )}
