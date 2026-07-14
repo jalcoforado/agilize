@@ -13,11 +13,11 @@ import relatoriosRoutes from './routes/relatorios';
 import adminRoutes from './routes/admin';
 import usuariosRoutes from './routes/usuarios';
 import type { HttpError } from './types/http';
+import { variaveisObrigatoriasAusentes } from './config/env';
 
 // Validação de variáveis de ambiente obrigatórias (fail-fast, ignorada em teste)
 if (process.env.NODE_ENV !== 'test') {
-  const REQUIRED_ENV = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME', 'JWT_SECRET'];
-  const missingEnv = REQUIRED_ENV.filter((k) => !process.env[k]);
+  const missingEnv = variaveisObrigatoriasAusentes(process.env);
   if (missingEnv.length) {
     console.error('❌ Variáveis de ambiente obrigatórias ausentes:', missingEnv.join(', '));
     process.exit(1);
@@ -69,7 +69,6 @@ app.get('/health', async (req: Request, res: Response) => {
     checks.db = 'error';
   }
 
-  const allOk = Object.values(checks).every((v) => v === 'ok' || typeof v !== 'string' || v === checks.timestamp);
   res.status(checks.db === 'ok' ? 200 : 503).json({ success: checks.db === 'ok', ...checks });
 });
 
@@ -83,7 +82,7 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/usuarios', usuariosRoutes);
 
 // Middleware de erro
-app.use((err: HttpError, req: Request, res: Response, next: NextFunction) => {
+app.use((err: HttpError, req: Request, res: Response, _next: NextFunction) => {
   const status = err.statusCode || 500;
   const isServerError = status >= 500;
 

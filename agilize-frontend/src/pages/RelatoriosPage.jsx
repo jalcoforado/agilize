@@ -47,6 +47,12 @@ function fmtMes(mes) {
   return `${m}/${ano}`;
 }
 
+function corSLA(percentual, tipo) {
+  if (percentual >= 80) return tipo === 'barra' ? 'bg-green-500' : 'text-green-600';
+  if (percentual >= 60) return tipo === 'barra' ? 'bg-amber-400' : 'text-amber-600';
+  return tipo === 'barra' ? 'bg-red-500' : 'text-red-600';
+}
+
 function pct(valor, max) {
   if (!max || !valor) return 0;
   return Math.round((valor / max) * 100);
@@ -134,6 +140,7 @@ export default function RelatoriosPage() {
         etapa:     etapa.data.dados,
       });
     } catch (e) {
+      console.error('[RelatoriosPage] Erro ao carregar relatórios:', e);
       setErro('Erro ao carregar relatórios. Verifique sua conexão.');
     } finally {
       setCarregando(false);
@@ -207,13 +214,13 @@ export default function RelatoriosPage() {
                     <Shield size={16} className="text-tce-600" />
                     <h3 className="text-sm font-semibold text-gray-700">SLA — Conformidade de Prazo</h3>
                   </div>
-                  <span className={`text-2xl font-bold ${d.sla.percentual_sla >= 80 ? 'text-green-600' : d.sla.percentual_sla >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                  <span className={`text-2xl font-bold ${corSLA(d.sla.percentual_sla, 'texto')}`}>
                     {d.sla.percentual_sla}%
                   </span>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
                   <div
-                    className={`h-3 rounded-full transition-all duration-700 ${d.sla.percentual_sla >= 80 ? 'bg-green-500' : d.sla.percentual_sla >= 60 ? 'bg-amber-400' : 'bg-red-500'}`}
+                    className={`h-3 rounded-full transition-all duration-700 ${corSLA(d.sla.percentual_sla, 'barra')}`}
                     style={{ width: `${d.sla.percentual_sla}%` }}
                   />
                 </div>
@@ -352,12 +359,16 @@ export default function RelatoriosPage() {
                   <div className="space-y-2.5">
                     {dados.etapa.slice(0, 10).map(e => {
                       const maxEtapa = Math.max(...dados.etapa.map(x => x.media_dias || 0), 1);
+                      let corBarra;
+                      if (e.media_dias > 10) corBarra = 'bg-red-400';
+                      else if (e.media_dias > 5) corBarra = 'bg-amber-400';
+                      else corBarra = 'bg-green-400';
                       return (
                         <BarraHorizontal key={e.etapa}
                           label={LABEL_STATUS[e.etapa] || e.etapa}
                           valor={e.media_dias ?? 0}
                           max={maxEtapa}
-                          cor={e.media_dias > 10 ? 'bg-red-400' : e.media_dias > 5 ? 'bg-amber-400' : 'bg-green-400'}
+                          cor={corBarra}
                           sufixo="d"
                         />
                       );

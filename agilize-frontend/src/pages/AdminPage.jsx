@@ -107,9 +107,14 @@ const PERFIS_SEC_POR_PRINCIPAL = {
 // ─── Modal de usuário (criar / editar) ───────────────────────────────────────
 
 function ModalUsuario({ usuario, onSalvar, onFechar }) {
-  const perfisSecIniciais = Array.isArray(usuario?.perfis_secundarios)
-    ? usuario.perfis_secundarios
-    : (typeof usuario?.perfis_secundarios === 'string' ? JSON.parse(usuario.perfis_secundarios || '[]') : []);
+  let perfisSecIniciais;
+  if (Array.isArray(usuario?.perfis_secundarios)) {
+    perfisSecIniciais = usuario.perfis_secundarios;
+  } else if (typeof usuario?.perfis_secundarios === 'string') {
+    perfisSecIniciais = JSON.parse(usuario.perfis_secundarios || '[]');
+  } else {
+    perfisSecIniciais = [];
+  }
 
   const [form, setForm] = useState({
     nome: usuario?.nome || '',
@@ -162,6 +167,17 @@ function ModalUsuario({ usuario, onSalvar, onFechar }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErro('');
+    const precisaUnidade = form.perfil_principal !== 'GESTOR_DEPARTAMENTO';
+    if (!form.id_departamento || (precisaUnidade && !form.id_unidade)) {
+      setErro(precisaUnidade
+        ? 'Departamento e unidade são obrigatórios para todos os usuários.'
+        : 'Departamento é obrigatório para Gestor de Departamento.');
+      return;
+    }
+    if (form.perfil_principal === 'AVALIADOR_TECNICO' && (!idDeptSti || form.id_departamento !== idDeptSti)) {
+      setErro('O perfil Avaliador Técnico é exclusivo para usuários da Secretaria de Tecnologia da Informação.');
+      return;
+    }
     setSalvando(true);
     try {
       const dados = {
@@ -183,6 +199,11 @@ function ModalUsuario({ usuario, onSalvar, onFechar }) {
 
   const campo = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-500 focus:border-transparent';
 
+  let textoBotaoSalvar;
+  if (salvando) textoBotaoSalvar = 'Salvando...';
+  else if (usuario) textoBotaoSalvar = 'Salvar alterações';
+  else textoBotaoSalvar = 'Criar usuário';
+
   return (
     <Modal titulo={usuario ? 'Editar Usuário' : 'Novo Usuário'} onFechar={onFechar} largura="max-w-xl">
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -203,13 +224,6 @@ function ModalUsuario({ usuario, onSalvar, onFechar }) {
               onChange={e => set('senha', e.target.value)} required={!usuario} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Perfil principal *</label>
-            <select className={campo} value={form.perfil_principal}
-              onChange={e => { set('perfil_principal', e.target.value); set('perfis_secundarios', []); }} required>
-              {PERFIS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
-          </div>
-          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Departamento</label>
             <select className={campo} value={form.id_departamento}
               onChange={e => { set('id_departamento', e.target.value); set('id_unidade', ''); set('perfis_secundarios', []); }}>
@@ -222,6 +236,13 @@ function ModalUsuario({ usuario, onSalvar, onFechar }) {
             <select className={campo} value={form.id_unidade} onChange={e => set('id_unidade', e.target.value)} disabled={!form.id_departamento}>
               <option value="">Sem unidade</option>
               {unidades.map(u => <option key={u.id_unidade} value={String(u.id_unidade)}>{u.sigla} — {u.nome_unidade}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Perfil principal *</label>
+            <select className={campo} value={form.perfil_principal}
+              onChange={e => { set('perfil_principal', e.target.value); set('perfis_secundarios', []); }} required>
+              {PERFIS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </div>
         </div>
@@ -267,7 +288,7 @@ function ModalUsuario({ usuario, onSalvar, onFechar }) {
           </button>
           <button type="submit" disabled={salvando}
             className="px-4 py-2 text-sm font-semibold bg-tce-700 text-white rounded-lg hover:bg-tce-800 disabled:opacity-50 transition">
-            {salvando ? 'Salvando...' : (usuario ? 'Salvar alterações' : 'Criar usuário')}
+            {textoBotaoSalvar}
           </button>
         </div>
       </form>
@@ -500,6 +521,64 @@ function AbaUsuarios() {
     carregar();
   };
 
+  let linhasTabela;
+  if (carregando) {
+    linhasTabela = <tr><td colSpan={5} className="text-center py-10 text-gray-400">Carregando...</td></tr>;
+  } else if (usuarios.length === 0) {
+    linhasTabela = <tr><td colSpan={5} className="text-center py-10 text-gray-400">Nenhum usuário encontrado.</td></tr>;
+  } else {
+    linhasTabela = usuarios.map(u => (
+      <tr key={u.id_usuario} className={`hover:bg-gray-50 transition ${!u.ativo ? 'opacity-50' : ''}`}>
+        <td className="px-4 py-3">
+          <p className="font-medium text-gray-800">{u.nome}</p>
+          <p className="text-xs text-gray-500">{u.email}</p>
+        </td>
+        <td className="px-4 py-3">
+          <div className="inline-flex flex-wrap gap-1 items-center">
+            <BadgePerfil perfil={u.perfil_principal} />
+            {Array.isArray(u.perfis_secundarios) && u.perfis_secundarios.map(p => (
+              <BadgePerfil key={p} perfil={p} />
+            ))}
+          </div>
+        </td>
+        <td className="px-4 py-3 hidden md:table-cell text-gray-600">
+          {u.sigla ? <span>{u.sigla}{u.nome_departamento ? ` / ${u.nome_departamento}` : ''}</span> : <span className="text-gray-400">—</span>}
+        </td>
+        <td className="px-4 py-3 text-center">
+          <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${u.ativo ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+            {u.ativo ? 'Ativo' : 'Inativo'}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center justify-end gap-1">
+            <div className="relative group">
+              <button
+                onClick={() => setModal({ tipo: 'usuario', usuario: u })}
+                className="p-1.5 text-gray-400 hover:text-tce-700 rounded transition"
+              >
+                <Edit2 size={22} />
+              </button>
+              <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                Editar
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                onClick={() => setConfirmando(u)}
+                className={`p-1.5 rounded transition ${u.ativo ? 'text-gray-400 hover:text-amber-600' : 'text-gray-400 hover:text-green-600'}`}
+              >
+                {u.ativo ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
+              </button>
+              <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                {u.ativo ? 'Desativar' : 'Ativar'}
+              </span>
+            </div>
+          </div>
+        </td>
+      </tr>
+    ));
+  }
+
   return (
     <div className="space-y-4">
       {/* Cabeçalho: título à esquerda, ações à direita */}
@@ -629,60 +708,7 @@ function AbaUsuarios() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {carregando ? (
-              <tr><td colSpan={5} className="text-center py-10 text-gray-400">Carregando...</td></tr>
-            ) : usuarios.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-10 text-gray-400">Nenhum usuário encontrado.</td></tr>
-            ) : usuarios.map(u => (
-              <tr key={u.id_usuario} className={`hover:bg-gray-50 transition ${!u.ativo ? 'opacity-50' : ''}`}>
-                <td className="px-4 py-3">
-                  <p className="font-medium text-gray-800">{u.nome}</p>
-                  <p className="text-xs text-gray-500">{u.email}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="inline-flex flex-wrap gap-1 items-center">
-                    <BadgePerfil perfil={u.perfil_principal} />
-                    {Array.isArray(u.perfis_secundarios) && u.perfis_secundarios.map(p => (
-                      <BadgePerfil key={p} perfil={p} />
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-3 hidden md:table-cell text-gray-600">
-                  {u.sigla ? <span>{u.sigla}{u.nome_departamento ? ` / ${u.nome_departamento}` : ''}</span> : <span className="text-gray-400">—</span>}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${u.ativo ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
-                    {u.ativo ? 'Ativo' : 'Inativo'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    <div className="relative group">
-                      <button
-                        onClick={() => setModal({ tipo: 'usuario', usuario: u })}
-                        className="p-1.5 text-gray-400 hover:text-tce-700 rounded transition"
-                      >
-                        <Edit2 size={22} />
-                      </button>
-                      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                        Editar
-                      </span>
-                    </div>
-                    <div className="relative group">
-                      <button
-                        onClick={() => setConfirmando(u)}
-                        className={`p-1.5 rounded transition ${u.ativo ? 'text-gray-400 hover:text-amber-600' : 'text-gray-400 hover:text-green-600'}`}
-                      >
-                        {u.ativo ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
-                      </button>
-                      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                        {u.ativo ? 'Desativar' : 'Ativar'}
-                      </span>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {linhasTabela}
           </tbody>
         </table>
       </div>

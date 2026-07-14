@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { DemandaController, HistoricoController } from '../controllers';
 import { autenticar } from '../middleware/auth';
 import { verificarAcessoDemanda } from '../middleware/acesso';
-import { validarDemanda, validarValidacao, validarAprovacao, validarHomologacao, validarRejeicao, validarCancelamento } from '../middleware/validacao';
+import { validarDemanda, validarValidacao, validarAprovacao, validarHomologacao, validarRejeicao, validarCancelamento, validarParecerAvaliador, validarEncaminharAvaliador } from '../middleware/validacao';
 import db from '../db/connection';
 import type { AnexoInfo } from '../types/models';
 
@@ -40,6 +40,8 @@ router.post('/:id/enviar-homologacao-sti', DemandaController.enviarHomologacaoST
 router.post('/:id/solicitar-ajustes-homologacao', validarValidacao, DemandaController.solicitarAjustesHomologacao);
 router.post('/:id/homologar', validarHomologacao, DemandaController.homologar);
 router.post('/:id/rejeitar', validarRejeicao, DemandaController.rejeitar);
+router.post('/:id/rejeitar-gestor-homologacao', validarRejeicao, DemandaController.rejeitarGestorHomologacao);
+router.post('/:id/rejeitar-avaliador-homologacao', validarRejeicao, DemandaController.rejeitarAvaliadorHomologacao);
 router.post('/:id/reenviar-homologacao-sti', DemandaController.reenviarHomologacaoSTI);
 
 // ─── FASE 4: PRODUÇÃO ────────────────────────────────────────────────────
@@ -48,17 +50,25 @@ router.post('/:id/confirmar-deploy', validarAprovacao, DemandaController.confirm
 router.post('/:id/desativar', validarCancelamento, DemandaController.desativar);
 
 // ─── AVALIADOR TÉCNICO ───────────────────────────────────────────────────
-router.post('/:id/encaminhar-avaliador-tecnico', DemandaController.encaminharAvaliador);
-router.post('/:id/avaliador-solicitar-ajustes', DemandaController.avaliadorSolicitarAjustes);
-router.post('/:id/avaliador-devolver-analista', DemandaController.avaliadorDevolverAnalista);
+router.post('/:id/encaminhar-avaliador-tecnico', validarEncaminharAvaliador, DemandaController.encaminharAvaliador);
+router.post('/:id/avaliador-solicitar-ajustes', validarParecerAvaliador, DemandaController.avaliadorSolicitarAjustes);
+router.post('/:id/avaliador-devolver-analista', validarParecerAvaliador, DemandaController.avaliadorDevolverAnalista);
 
 // ─── DPO ─────────────────────────────────────────────────────────────────────
 router.post('/:id/encaminhar-dpo',        DemandaController.encaminharDPO);
 router.post('/:id/dpo-aprovar',           validarAprovacao, DemandaController.dpoAprovar);
 router.post('/:id/dpo-solicitar-ajustes', validarValidacao, DemandaController.dpoSolicitarAjustes);
 
+// ─── SUSPENSÃO ─────────────────────────────────────────────────────────────
+router.post('/:id/suspender', validarCancelamento, DemandaController.suspender);
+router.post('/:id/retornar-suspensao', DemandaController.retornarDeSuspensao);
+
 // ─── CANCELAMENTO ─────────────────────────────────────────────────────────
 router.post('/:id/cancelar', validarCancelamento, DemandaController.cancelar);
+
+// ─── CAMPOS OPERACIONAIS ──────────────────────────────────────────────────
+router.patch('/:id/prioridade', DemandaController.atualizarPrioridade);
+router.patch('/:id/transferir-locacao', DemandaController.transferirLocacao);
 
 // Diagnóstico IA
 router.get('/:id/diagnostico', verificarAcessoDemanda, DemandaController.obterDiagnostico);
@@ -80,10 +90,21 @@ router.get('/:id/historico/:idHistorico/anexo/:idx', verificarAcessoDemanda, asy
     const anexo = lista[parseInt(idx)];
     if (!anexo) return res.status(404).json({ success: false, message: 'Índice inválido' });
 
+    const MIMES_PERMITIDOS = new Set([
+      'application/pdf',
+      'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain',
+    ]);
+
     const match = anexo.conteudo.match(/^data:(.+);base64,(.+)$/s);
     if (!match) return res.status(400).json({ success: false, message: 'Conteúdo inválido' });
 
     const [, mime, b64] = match;
+    if (!MIMES_PERMITIDOS.has(mime))
+      return res.status(415).json({ success: false, message: 'Tipo de arquivo não permitido' });
+
     const buf = Buffer.from(b64, 'base64');
     res.setHeader('Content-Type', mime);
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(anexo.nome)}`);

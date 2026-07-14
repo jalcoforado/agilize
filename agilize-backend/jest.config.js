@@ -6,4 +6,5 @@ module.exports = {
   globalSetup: './src/tests/globalSetup.ts',
   globalTeardown: './src/tests/globalTeardown.ts',
   testTimeout: 15000,
+  transformIgnorePatterns: ['node_modules/(?!(uuid)/)'],
 };

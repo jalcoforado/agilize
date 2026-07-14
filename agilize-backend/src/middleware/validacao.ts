@@ -114,6 +114,30 @@ export const validarHomologacao = (req: Request, res: Response, next: NextFuncti
   next();
 };
 
+export const validarParecerAvaliador = (req: Request, res: Response, next: NextFunction): void => {
+  const schema = Joi.object({
+    parecer: Joi.string().min(10).max(5000).required(),
+    comentario: Joi.string().max(5000).optional().allow(''),
+    anexos: Joi.array().items(anexoSchema).max(3).optional(),
+  });
+
+  const { error, value } = schema.validate(req.body, { abortEarly: false });
+  if (error) return next(buildValidationError('Parecer obrigatório (mínimo 10 caracteres)', error));
+  req.parecer = value as ParecerInput;
+  next();
+};
+
+export const validarEncaminharAvaliador = (req: Request, res: Response, next: NextFunction): void => {
+  const schema = Joi.object({
+    id_unidade: Joi.number().integer().required(),
+    comentario: Joi.string().max(5000).optional().allow(''),
+  });
+
+  const { error } = schema.validate(req.body, { abortEarly: false });
+  if (error) return next(buildValidationError('Unidade do Avaliador Técnico é obrigatória', error));
+  next();
+};
+
 export const validarCancelamento = (req: Request, res: Response, next: NextFunction): void => {
   const schema = Joi.object({
     motivo: Joi.string().min(10).max(1000).required(),

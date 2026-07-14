@@ -4,9 +4,9 @@ import { login } from './helpers';
 import {
   request, app, db,
   criarContextoFluxo, limparContexto, limparDemanda,
-  demandaPayload, demandaPayloadComDadosSensiveis,
+  demandaPayload,
   avancarParaAGUARDANDO_DPO, avancarParaAGUARDANDO_DPO_HOMOLOGACAO,
-  PARECER, PARECER_GESTOR, PARECER_STI,
+  PARECER_GESTOR,
   criarDPO, limparUsuario,
   type ContextoFluxo,
 } from './setup_helpers';

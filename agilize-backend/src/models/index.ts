@@ -1,5 +1,5 @@
 import db from '../db/connection';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import type {
   Demanda as DemandaRow,
   Usuario,
@@ -7,7 +7,6 @@ import type {
   Updatable,
   DemandaInput,
   TipoDeploy,
-  Perfil,
   AnexoInfo,
 } from '../types/models';
 import type { HttpError } from '../types/http';
@@ -48,7 +47,7 @@ interface HistoricoInput {
 
 class Demanda {
   static async criar(dados: DemandaInput, idSolicitante: Id, ipOrigem?: string): Promise<DemandaRow | undefined> {
-    const numeroDemanda = `AG-${new Date().getFullYear()}-${uuidv4().substring(0, 6).toUpperCase()}`;
+    const numeroDemanda = `AG-${new Date().getFullYear()}-${randomUUID().substring(0, 6).toUpperCase()}`;
 
     const solicitante = await db('tb_usuarios').where('id_usuario', idSolicitante).first();
     const unidade = await db('tb_unidades').where('id_unidade', dados.id_unidade).first();
@@ -82,6 +81,7 @@ class Demanda {
       impacta_outras_areas: dados.impacta_outras_areas ?? null,
       areas_impactadas: dados.areas_impactadas ?? null,
       usa_ia_desenvolvimento: dados.usa_ia_desenvolvimento ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       anexos: (dados.anexos?.length ? JSON.stringify(dados.anexos) : null) as any,
       status_atual: 'DRAFT',
       id_usuario_criacao: idSolicitante,
@@ -317,6 +317,16 @@ class Demanda {
     return this.obterPorId(id);
   }
 
+  static async rejeitarGestorHomologacao(id: Id, idGestor: Id, motivo: string, parecer: string, ip?: string, anexos?: AnexoInfo[]): Promise<DemandaRow | undefined> {
+    const demanda = (await this.obterPorId(id)) as DemandaRow;
+    _assertStatus(demanda, 'SUBMETIDO_HOMOLOGACAO');
+    await _assertGestor(demanda, idGestor);
+
+    await this.atualizar(id, { status_atual: 'REJEITADA', motivo_cancelamento: motivo, data_conclusao: db.fn.now() });
+    await HistoricoDecisao.criar({ id_demanda: id, numero_demanda: demanda.numero_demanda, id_usuario: idGestor, status_anterior: 'SUBMETIDO_HOMOLOGACAO', status_novo: 'REJEITADA', tipo_acao: 'REJEITAR_GESTOR_HOMOLOGACAO', motivo_rejeicao: motivo, parecer, ip_usuario: ip, anexos });
+    return this.obterPorId(id);
+  }
+
   static async iniciarAjusteHomologacao(id: Id, idSolicitante: Id): Promise<DemandaRow | undefined> {
     const demanda = (await this.obterPorId(id)) as DemandaRow;
     const permitidos = ['DEVOLVIDA_HOMOLOGACAO', 'SOLICITADO_AJUSTES_HOMOLOGACAO'];
@@ -465,8 +475,11 @@ class Demanda {
     return this.obterPorId(id);
   }
 
-  static async avaliadorSolicitarAjustes(id: Id, idAvaliador: Id, parecer: string, comentario?: string, ip?: string, anexos?: AnexoInfo[]): Promise<DemandaRow | undefined> {
+  static async avaliadorSolicitarAjustes(id: Id, idAvaliador: Id, idUnidadeAvaliador: Id, parecer: string, comentario?: string, ip?: string, anexos?: AnexoInfo[]): Promise<DemandaRow | undefined> {
     const demanda = (await this.obterPorId(id)) as DemandaRow;
+
+    if (Number(demanda.id_unidade_avaliador) !== Number(idUnidadeAvaliador))
+      throw _erro('Você não é o avaliador designado para esta demanda', 403);
 
     const isFase1 = demanda.status_atual === 'AGUARDANDO_AVALIADOR';
     const isFase3 = demanda.status_atual === 'AGUARDANDO_AVALIADOR_HOMOLOGACAO';
@@ -480,8 +493,11 @@ class Demanda {
     return this.obterPorId(id);
   }
 
-  static async avaliadorDevolverAnalista(id: Id, idAvaliador: Id, parecer: string, comentario?: string, ip?: string, anexos?: AnexoInfo[]): Promise<DemandaRow | undefined> {
+  static async avaliadorDevolverAnalista(id: Id, idAvaliador: Id, idUnidadeAvaliador: Id, parecer: string, comentario?: string, ip?: string, anexos?: AnexoInfo[]): Promise<DemandaRow | undefined> {
     const demanda = (await this.obterPorId(id)) as DemandaRow;
+
+    if (Number(demanda.id_unidade_avaliador) !== Number(idUnidadeAvaliador))
+      throw _erro('Você não é o avaliador designado para esta demanda', 403);
 
     const isFase1 = demanda.status_atual === 'AGUARDANDO_AVALIADOR';
     const isFase3 = demanda.status_atual === 'AGUARDANDO_AVALIADOR_HOMOLOGACAO';
@@ -492,6 +508,18 @@ class Demanda {
 
     await this.atualizar(id, { status_atual: novoStatus });
     await HistoricoDecisao.criar({ id_demanda: id, numero_demanda: demanda.numero_demanda, id_usuario: idAvaliador, status_anterior: statusAnterior, status_novo: novoStatus, tipo_acao: 'AVALIADOR_DEVOLVER_ANALISTA', parecer, comentario, ip_usuario: ip, anexos });
+    return this.obterPorId(id);
+  }
+
+  static async rejeitarAvaliadorHomologacao(id: Id, idAvaliador: Id, idUnidadeAvaliador: Id, motivo: string, parecer: string, ip?: string, anexos?: AnexoInfo[]): Promise<DemandaRow | undefined> {
+    const demanda = (await this.obterPorId(id)) as DemandaRow;
+
+    if (Number(demanda.id_unidade_avaliador) !== Number(idUnidadeAvaliador))
+      throw _erro('Você não é o avaliador designado para esta demanda', 403);
+    _assertStatus(demanda, 'AGUARDANDO_AVALIADOR_HOMOLOGACAO');
+
+    await this.atualizar(id, { status_atual: 'REJEITADA', motivo_cancelamento: motivo, data_conclusao: db.fn.now() });
+    await HistoricoDecisao.criar({ id_demanda: id, numero_demanda: demanda.numero_demanda, id_usuario: idAvaliador, status_anterior: 'AGUARDANDO_AVALIADOR_HOMOLOGACAO', status_novo: 'REJEITADA', tipo_acao: 'REJEITAR_AVALIADOR_HOMOLOGACAO', motivo_rejeicao: motivo, parecer, ip_usuario: ip, anexos });
     return this.obterPorId(id);
   }
 
@@ -619,6 +647,169 @@ class Demanda {
     return this.obterPorId(id);
   }
 
+  static async transferirLocacao(
+    id: Id,
+    idNovaUnidade: Id,
+    motivo: string,
+    idUsuario: Id,
+    ip?: string,
+  ): Promise<void> {
+    const demanda = (await this.obterPorId(id)) as DemandaRow;
+
+    if (demanda.status_atual !== 'EM_MONITORAMENTO')
+      throw _erro(`Transferência só é permitida em EM_MONITORAMENTO. Status atual: "${demanda.status_atual}"`, 409);
+
+    const inventario = await db('tb_inventario_aplicacoes').where('id_demanda', id).first();
+    if (!inventario)
+      throw _erro('Registro de inventário não encontrado para esta demanda', 404);
+
+    if (Number(demanda.id_unidade) === Number(idNovaUnidade))
+      throw _erro('A nova unidade é a mesma que a atual. Nenhuma alteração realizada.', 422);
+
+    const novaUnidade = await db('tb_unidades').where('id_unidade', idNovaUnidade).where('ativo', true).first();
+    if (!novaUnidade) throw _erro('Unidade de destino não encontrada ou inativa', 404);
+
+    const novoDepartamento = novaUnidade.id_departamento
+      ? await db('tb_departamentos').where('id_departamento', novaUnidade.id_departamento).first()
+      : null;
+
+    const usuario = await db('tb_usuarios').where('id_usuario', idUsuario).first();
+
+    const comentarioHistorico = `Unidade anterior: ${demanda.nome_unidade ?? demanda.id_unidade} → Nova unidade: ${novaUnidade.nome_unidade}`
+      + (novoDepartamento ? ` (${novoDepartamento.nome_departamento})` : '');
+
+    await db.transaction(async (trx) => {
+      // Atualiza tb_demandas — fonte lida pelo InventarioPage e DashboardPage
+      await trx('tb_demandas').where('id_demanda', id).update({
+        id_unidade: idNovaUnidade,
+        nome_unidade: novaUnidade.nome_unidade,
+        id_departamento: novaUnidade.id_departamento ?? demanda.id_departamento,
+        nome_departamento: novoDepartamento?.nome_departamento ?? demanda.nome_departamento,
+        data_ultima_atualizacao: trx.fn.now(),
+      });
+
+      // Atualiza tb_inventario_aplicacoes — registro canônico do inventário
+      await trx('tb_inventario_aplicacoes').where('id_demanda', id).update({
+        id_unidade: idNovaUnidade,
+        nome_unidade: novaUnidade.nome_unidade,
+      });
+
+      await trx('tb_historico_decisoes').insert({
+        id_demanda: id,
+        numero_demanda: demanda.numero_demanda,
+        id_usuario: idUsuario,
+        nome_usuario: usuario?.nome ?? 'Sistema',
+        email_usuario: usuario?.email ?? null,
+        perfil_usuario: usuario?.perfil_principal ?? 'GESTOR_SISTEMA',
+        status_anterior: 'EM_MONITORAMENTO',
+        status_novo: 'EM_MONITORAMENTO',
+        tipo_acao: 'TRANSFERENCIA_LOCACAO',
+        parecer: motivo,
+        comentario: comentarioHistorico,
+        ip_usuario: ip ?? null,
+        sla_em_dia: true,
+        id_unidade_demanda: demanda.id_unidade,
+        nome_unidade_demanda: demanda.nome_unidade,
+        data_hora: trx.fn.now(),
+        timezone: 'America/Fortaleza',
+      });
+    });
+  }
+
+  // ─── SUSPENSÃO ────────────────────────────────────────────────────────────
+
+  static async suspender(
+    id: Id,
+    idUsuario: Id,
+    todosPerfis: string[],
+    idUnidadeUsuario: Id | null,
+    motivo: string,
+    ip?: string,
+  ): Promise<DemandaRow | undefined> {
+    const demanda = (await this.obterPorId(id)) as DemandaRow;
+
+    const suspensiveisAnalista = ['FILA_STI', 'FILA_HOMOLOGACAO_STI'];
+    const suspensiveisAvaliador = ['AGUARDANDO_AVALIADOR', 'AGUARDANDO_AVALIADOR_HOMOLOGACAO'];
+    const todosSuspensivos = [...suspensiveisAnalista, ...suspensiveisAvaliador];
+
+    if (!todosSuspensivos.includes(demanda.status_atual))
+      throw _erro(`Status "${demanda.status_atual}" não permite suspensão`, 409);
+
+    const isAdmin = todosPerfis.includes('GESTOR_SISTEMA');
+    const isAnalista = todosPerfis.includes('ANALISTA_STI');
+    const isAvaliador = todosPerfis.includes('AVALIADOR_TECNICO');
+
+    if (!isAdmin) {
+      const isAnalistaStatus = suspensiveisAnalista.includes(demanda.status_atual);
+      const isAvaliadorStatus = suspensiveisAvaliador.includes(demanda.status_atual);
+
+      if (isAnalistaStatus && !isAnalista)
+        throw _erro('Apenas Analista STI pode suspender demandas neste status', 403);
+
+      if (isAvaliadorStatus) {
+        if (!isAvaliador)
+          throw _erro('Apenas Avaliador Técnico designado pode suspender demandas neste status', 403);
+        if (Number(demanda.id_unidade_avaliador) !== Number(idUnidadeUsuario))
+          throw _erro('Você não é o Avaliador Técnico designado para esta demanda', 403);
+      }
+    }
+
+    const statusAnterior = demanda.status_atual;
+    await this.atualizar(id, {
+      status_atual: 'SUSPENSO',
+      status_antes_suspensao: statusAnterior,
+    } as Updatable<DemandaRow>);
+    await HistoricoDecisao.criar({
+      id_demanda: id,
+      numero_demanda: demanda.numero_demanda,
+      id_usuario: idUsuario,
+      status_anterior: statusAnterior,
+      status_novo: 'SUSPENSO',
+      tipo_acao: 'SUSPENDER',
+      motivo_rejeicao: motivo,
+      ip_usuario: ip,
+    });
+    return this.obterPorId(id);
+  }
+
+  static async retornarDeSuspensao(
+    id: Id,
+    idUsuario: Id,
+    todosPerfis: string[],
+    idUnidadeUsuario: Id | null,
+    ip?: string,
+  ): Promise<DemandaRow | undefined> {
+    const demanda = (await this.obterPorId(id)) as DemandaRow;
+    _assertStatus(demanda, 'SUSPENSO');
+
+    const isAdmin = todosPerfis.includes('GESTOR_SISTEMA');
+    const isAnalista = todosPerfis.includes('ANALISTA_STI');
+    const isAvaliador = todosPerfis.includes('AVALIADOR_TECNICO');
+
+    if (!isAdmin && !isAnalista) {
+      if (!isAvaliador || Number(demanda.id_unidade_avaliador) !== Number(idUnidadeUsuario))
+        throw _erro('Sem permissão para retomar esta demanda da suspensão', 403);
+    }
+
+    const statusRetorno = (demanda as unknown as Record<string, unknown>).status_antes_suspensao as string | null;
+    if (!statusRetorno) throw _erro('Status de retorno não registrado — contate o administrador', 409);
+
+    await this.atualizar(id, {
+      status_atual: statusRetorno,
+      status_antes_suspensao: null,
+    } as Updatable<DemandaRow>);
+    await HistoricoDecisao.criar({
+      id_demanda: id,
+      numero_demanda: demanda.numero_demanda,
+      id_usuario: idUsuario,
+      status_anterior: 'SUSPENSO',
+      status_novo: statusRetorno,
+      tipo_acao: 'RETORNAR_SUSPENSAO',
+      ip_usuario: ip,
+    });
+    return this.obterPorId(id);
+  }
+
   // ─── CANCELAMENTO ─────────────────────────────────────────────────────────
 
   static async cancelar(id: Id, idUsuario: Id, motivo: string, ip?: string): Promise<DemandaRow | undefined> {
@@ -628,6 +819,7 @@ class Demanda {
       'DRAFT', 'PENDENTE_GESTOR', 'DEVOLVIDA_AJUSTES', 'SOLICITANTE_AJUSTANDO',
       'VALIDADA_GESTOR', 'FILA_STI', 'REPROVADA_STI', 'SOLICITADO_AJUSTES_STI',
       'APROVADA_STI', 'EM_DESENVOLVIMENTO', 'SUBMETIDO_HOMOLOGACAO',
+      'SUSPENSO',
     ];
 
     if (!cancelaveis.includes(demanda.status_atual)) throw _erro('Demanda não pode ser cancelada no status atual', 409);
@@ -643,20 +835,20 @@ class Demanda {
 const PERFIL_POR_TIPO_ACAO: Record<string, string> = {
   // Solicitante
   ENVIAR: 'SOLICITANTE', INICIAR_AJUSTE: 'SOLICITANTE', INICIAR: 'SOLICITANTE',
-  SUBMETER_PRODUTO: 'SOLICITANTE', INICIAR_AJUSTE_HOMOLOGACAO: 'SOLICITANTE', CANCELAR: 'SOLICITANTE',
+  SUBMETER_PRODUTO: 'SOLICITANTE', INICIAR_AJUSTE_HOMOLOGACAO: 'SOLICITANTE',
   // Gestor da Unidade
   VALIDAR: 'GESTOR_UNIDADE', DEVOLVER: 'GESTOR_UNIDADE', REJEITAR_GESTOR: 'GESTOR_UNIDADE',
   ENCAMINHAR_DPO_AUTO: 'GESTOR_UNIDADE', ENVIAR_STI: 'GESTOR_UNIDADE', REENVIAR: 'GESTOR_UNIDADE',
   VALIDAR_HOMOLOGACAO: 'GESTOR_UNIDADE', DEVOLVER_HOMOLOGACAO: 'GESTOR_UNIDADE',
   ENCAMINHAR_DPO_HOMOLOGACAO_AUTO: 'GESTOR_UNIDADE', ENVIAR_HOMOLOGACAO_STI: 'GESTOR_UNIDADE',
-  REENVIAR_HOMOLOGACAO_STI: 'GESTOR_UNIDADE',
+  REENVIAR_HOMOLOGACAO_STI: 'GESTOR_UNIDADE', REJEITAR_GESTOR_HOMOLOGACAO: 'GESTOR_UNIDADE',
   // Analista STI
   APROVAR: 'ANALISTA_STI', REPROVAR: 'ANALISTA_STI', SOLICITAR_AJUSTE: 'ANALISTA_STI',
   SOLICITAR_AJUSTES_HOMOLOGACAO: 'ANALISTA_STI', HOMOLOGAR: 'ANALISTA_STI',
   REJEITAR: 'ANALISTA_STI', ENCAMINHAR_AVALIADOR: 'ANALISTA_STI', ENCAMINHAR_DPO: 'ANALISTA_STI',
-  DESATIVAR: 'ANALISTA_STI',
   // Avaliador Técnico
   AVALIADOR_SOLICITAR_AJUSTES: 'AVALIADOR_TECNICO', AVALIADOR_DEVOLVER_ANALISTA: 'AVALIADOR_TECNICO',
+  REJEITAR_AVALIADOR_HOMOLOGACAO: 'AVALIADOR_TECNICO',
   // DPO
   DPO_APROVAR: 'DPO', DPO_SOLICITAR_AJUSTES: 'DPO',
   // Responsável Produção

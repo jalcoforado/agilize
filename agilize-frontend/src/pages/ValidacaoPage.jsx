@@ -281,19 +281,9 @@ function EmptyState() {
   );
 }
 
-const GRUPOS_AVALIACAO_STI = ['fila_sti', 'fila_homologacao_sti'];
-const GRUPOS_AVALIACAO_AVALIADOR = ['aguardando_avaliador', 'aguardando_avaliador_homologacao'];
-const GRUPOS_AVALIACAO_DPO = ['aguardando_dpo', 'aguardando_dpo_homologacao'];
-
-function LinhaDemanda({ demanda, navigate, grupoId }) {
+function LinhaDemanda({ demanda, navigate }) {
   const urgencia = urgenciaCor(demanda.data_ultima_atualizacao, demanda.prioridade);
-  const destino = GRUPOS_AVALIACAO_STI.includes(grupoId)
-    ? `/avaliacao/${demanda.id_demanda}`
-    : GRUPOS_AVALIACAO_AVALIADOR.includes(grupoId)
-    ? `/avaliacao-avaliador/${demanda.id_demanda}`
-    : GRUPOS_AVALIACAO_DPO.includes(grupoId)
-    ? `/avaliacao-dpo/${demanda.id_demanda}`
-    : `/demanda/${demanda.id_demanda}`;
+  const destino = `/demanda/${demanda.id_demanda}`;
   return (
     <button
       onClick={() => navigate(destino)}
@@ -325,7 +315,7 @@ function LinhaDemanda({ demanda, navigate, grupoId }) {
 
 const POR_PAGINA = 10;
 
-function GrupoFila({ grupo, demandas, carregando, navigate, grupoId }) {
+function GrupoFila({ grupo, demandas, carregando, navigate }) {
   const { icone: Icone, cor, titulo, descricao } = grupo;
   const [visiveis, setVisiveis] = useState(POR_PAGINA);
 
@@ -337,6 +327,41 @@ function GrupoFila({ grupo, demandas, carregando, navigate, grupoId }) {
   const temMais = lista.length > visiveis;
 
   if (!carregando && lista.length === 0) return null;
+
+  let conteudoGrupo;
+  if (carregando) {
+    conteudoGrupo = (
+      <div className="flex items-center justify-center py-8 gap-2 text-sm text-neutral-400">
+        <RefreshCw size={14} className="animate-spin" />
+        Carregando...
+      </div>
+    );
+  } else if (lista.length === 0) {
+    conteudoGrupo = (
+      <div className="flex items-center justify-center py-6 text-sm text-neutral-400 border-t border-neutral-100">
+        <Hourglass size={14} className="mr-2 opacity-50" />
+        Nenhum item neste grupo
+      </div>
+    );
+  } else {
+    conteudoGrupo = (
+      <>
+        {listaPagina.map(d => (
+          <LinhaDemanda key={d.id_demanda} demanda={d} navigate={navigate} />
+        ))}
+        {temMais && (
+          <button
+            onClick={() => setVisiveis(v => v + POR_PAGINA)}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-neutral-500 hover:text-tce-700 hover:bg-neutral-50 border-t border-neutral-100 transition"
+          >
+            <ChevronDown size={13} />
+            Ver mais {Math.min(POR_PAGINA, lista.length - visiveis)} itens
+            <span className="text-neutral-400">({lista.length - visiveis} restantes)</span>
+          </button>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className={`rounded-xl border ${cor.borda} overflow-hidden mb-4`}>
@@ -356,33 +381,7 @@ function GrupoFila({ grupo, demandas, carregando, navigate, grupoId }) {
       </div>
 
       <div className="bg-white">
-        {carregando ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-sm text-neutral-400">
-            <RefreshCw size={14} className="animate-spin" />
-            Carregando...
-          </div>
-        ) : lista.length === 0 ? (
-          <div className="flex items-center justify-center py-6 text-sm text-neutral-400 border-t border-neutral-100">
-            <Hourglass size={14} className="mr-2 opacity-50" />
-            Nenhum item neste grupo
-          </div>
-        ) : (
-          <>
-            {listaPagina.map(d => (
-              <LinhaDemanda key={d.id_demanda} demanda={d} navigate={navigate} grupoId={grupo.id} />
-            ))}
-            {temMais && (
-              <button
-                onClick={() => setVisiveis(v => v + POR_PAGINA)}
-                className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-neutral-500 hover:text-tce-700 hover:bg-neutral-50 border-t border-neutral-100 transition"
-              >
-                <ChevronDown size={13} />
-                Ver mais {Math.min(POR_PAGINA, lista.length - visiveis)} itens
-                <span className="text-neutral-400">({lista.length - visiveis} restantes)</span>
-              </button>
-            )}
-          </>
-        )}
+        {conteudoGrupo}
       </div>
     </div>
   );
@@ -420,6 +419,7 @@ export default function ValidacaoPage() {
     } finally {
       setCarregando(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- grupos é recalculado a cada render; incluí-lo reexecutaria o efeito sempre (revisar depois)
   }, [perfil]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -448,6 +448,19 @@ export default function ValidacaoPage() {
     );
   }
 
+  const sufixoPluralAcoes = totalAcoes > 1 ? 's' : '';
+
+  let mensagemStatusHeader;
+  if (perfil === 'GESTOR_DEPARTAMENTO') {
+    mensagemStatusHeader = totalAcoes === 0
+      ? 'Nenhuma demanda ativa no departamento'
+      : `${totalAcoes} demanda${sufixoPluralAcoes} ativa${sufixoPluralAcoes} no departamento`;
+  } else {
+    mensagemStatusHeader = totalAcoes === 0
+      ? 'Nenhuma demanda aguardando ação'
+      : `${totalAcoes} demanda${sufixoPluralAcoes} aguardando ação`;
+  }
+
   return (
     <Layout>
       <div className="p-6 max-w-4xl mx-auto">
@@ -467,15 +480,7 @@ export default function ValidacaoPage() {
             <p className="text-sm text-neutral-500">
               {perfilLabel}
               {!carregando && ' · '}
-              {!carregando && (
-                perfil === 'GESTOR_DEPARTAMENTO'
-                  ? totalAcoes === 0
-                    ? 'Nenhuma demanda ativa no departamento'
-                    : `${totalAcoes} demanda${totalAcoes > 1 ? 's' : ''} ativa${totalAcoes > 1 ? 's' : ''} no departamento`
-                  : totalAcoes === 0
-                    ? 'Nenhuma demanda aguardando ação'
-                    : `${totalAcoes} demanda${totalAcoes > 1 ? 's' : ''} aguardando ação`
-              )}
+              {!carregando && mensagemStatusHeader}
             </p>
             {ultimaAtt && (
               <p className="text-[11px] text-neutral-400 mt-0.5">
@@ -511,7 +516,6 @@ export default function ValidacaoPage() {
             <GrupoFila
               key={g.id}
               grupo={g}
-              grupoId={g.id}
               demandas={dados[g.id] || []}
               carregando={carregando}
               navigate={navigate}

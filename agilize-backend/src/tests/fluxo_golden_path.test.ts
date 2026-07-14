@@ -5,7 +5,7 @@ import {
   request, app, db,
   criarContextoFluxo, limparContexto, limparDemanda,
   demandaPayload,
-  PARECER, PARECER_GESTOR, PARECER_STI, PARECER_HOMOLOGACAO, MOTIVO_CANCELAMENTO,
+  PARECER_GESTOR, PARECER_STI, PARECER_HOMOLOGACAO, MOTIVO_CANCELAMENTO,
   criarAvaliadorTecnico, limparUsuario,
   type ContextoFluxo,
 } from './setup_helpers';
@@ -15,7 +15,6 @@ const SIGLA = 'TGP';
 let ctx: ContextoFluxo;
 const demandas: Array<number | undefined> = [];
 let emailAvaliador: string;
-let idAvaliador: number;
 
 beforeAll(async () => {
   [tokens.solicitante, tokens.gestor, tokens.analista, tokens.ops] = await Promise.all([
@@ -25,7 +24,6 @@ beforeAll(async () => {
   ctx = await criarContextoFluxo(SIGLA);
 
   const dir = await criarAvaliadorTecnico(tokens.admin);
-  idAvaliador = dir.idAvaliador;
   emailAvaliador = dir.email;
   tokens.avaliador = dir.token;
 });

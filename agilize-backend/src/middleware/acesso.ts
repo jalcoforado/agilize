@@ -11,7 +11,7 @@ const ACESSO_TOTAL: Perfil[] = ['ANALISTA_STI', 'AVALIADOR_TECNICO', 'DPO', 'RES
  * Compatível com rotas que usam :id e :idDemanda.
  * Anexa a demanda em req.demandaCarregada para evitar 2ª consulta no controller.
  */
-export const verificarAcessoDemanda = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const verificarAcessoDemanda = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
   try {
     const id = req.params.id ?? req.params.idDemanda;
     const demanda = await Demanda.obterPorId(id);
@@ -39,8 +39,16 @@ export const verificarAcessoDemanda = async (req: Request, res: Response, next: 
       return next();
     }
 
-    if (todosPerfis.includes('GESTOR_UNIDADE') || todosPerfis.includes('GESTOR_DEPARTAMENTO')) {
+    if (todosPerfis.includes('GESTOR_UNIDADE')) {
       if (!id_unidade || Number(demanda.id_unidade) !== Number(id_unidade)) {
+        return next(_erroAcesso());
+      }
+      req.demandaCarregada = demanda;
+      return next();
+    }
+
+    if (todosPerfis.includes('GESTOR_DEPARTAMENTO')) {
+      if (!req.user.id_departamento || Number(demanda.id_departamento) !== Number(req.user.id_departamento)) {
         return next(_erroAcesso());
       }
       req.demandaCarregada = demanda;

@@ -5,7 +5,7 @@ import {
   request, app, db,
   criarContextoFluxo, limparContexto, limparDemanda,
   demandaPayload, avancarParaAPROVADA_STI,
-  PARECER, PARECER_GESTOR,
+  PARECER_GESTOR,
   type ContextoFluxo,
 } from './setup_helpers';
 

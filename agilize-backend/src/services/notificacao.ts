@@ -1,5 +1,5 @@
 import db from '../db/connection';
-import * as emailService from './email.service';
+
 import type { Demanda as DemandaRow, Usuario, AuthUser, Id } from '../types/models';
 import type { HttpError } from '../types/http';
 
@@ -56,15 +56,12 @@ async function notificar({ idUsuario, emailDestinatario, idDemanda, numeroDemand
     canal: 'SISTEMA',
   });
 
-  if (emailDestinatario) {
-    emailService
-      .enviar({ para: emailDestinatario, assunto: titulo, titulo, numeroDemanda, mensagem, linkAcao })
-      .catch((err) => console.error(`[Notificacao] Falha ao enviar email para ${emailDestinatario}:`, (err as Error).message));
-  }
+
 }
 
 // ─── Notificações por evento de workflow ──────────────────────────────────────
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export async function notificarMudancaStatus(demanda: DemandaRow | undefined, statusNovo: string, _usuarioAcao: AuthUser): Promise<void> {
   if (!demanda) return;
   try {

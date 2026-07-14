@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { Demanda, HistoricoDecisao, type ListarFiltros, type ScopeCondition } from '../models';
 import { notificarMudancaStatus, notificarUnidadeProducao } from '../services/notificacao';
+import { dispararEmailMudancaStatus } from '../services/email-dispatcher';
 import db from '../db/connection';
-import type { Perfil } from '../types/models';
+import type { Perfil, Prioridade, AnexoInfo } from '../types/models';
 import type { HttpError } from '../types/http';
 
 const STI: Perfil[] = ['ANALISTA_STI', 'GESTOR_SISTEMA'];
@@ -11,6 +12,7 @@ const SOLICITANTE: Perfil[] = ['SOLICITANTE', 'GESTOR_SISTEMA'];
 const PRODUCAO: Perfil[] = ['SOLICITANTE', 'RESPONSAVEL_PRODUCAO', 'ANALISTA_STI', 'GESTOR_SISTEMA'];
 const AVALIADOR: Perfil[] = ['AVALIADOR_TECNICO', 'GESTOR_SISTEMA'];
 const DPO_ARRAY: Perfil[] = ['DPO', 'GESTOR_SISTEMA'];
+const SUSPENSAO: Perfil[] = ['ANALISTA_STI', 'AVALIADOR_TECNICO', 'GESTOR_SISTEMA'];
 
 function checkPerfil(req: Request, permitidos: Perfil[]): void {
   const todosPerfis: Perfil[] = [req.user.perfil_principal, ...(req.user.perfis_secundarios ?? [])];
@@ -37,6 +39,7 @@ class DemandaController {
       const demanda = await Demanda.criar(req.demandaValidada!, req.user.id_usuario, req.ip);
       res.status(201).json({ success: true, demanda, message: 'Demanda criada com sucesso' });
       notificarMudancaStatus(demanda, 'DRAFT', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'DRAFT').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -64,6 +67,7 @@ class DemandaController {
         dados_tecnicos: dadosValidados.dados_tecnicos ? JSON.stringify(dadosValidados.dados_tecnicos) : null,
         anexos: dadosValidados.anexos?.length ? JSON.stringify(dadosValidados.anexos) : null,
       };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const atualizada = await Demanda.atualizar(req.params.id, dadosParaSalvar as any);
       res.status(200).json({ success: true, demanda: atualizada, message: 'Demanda atualizada com sucesso' });
     } catch (error) { next(error); }
@@ -88,7 +92,7 @@ class DemandaController {
       }
       const { anexos } = req.body as { anexos?: unknown[] };
       await db('tb_demandas').where('id_demanda', req.params.id).update({
-        anexos: Array.isArray(anexos) && anexos.length ? JSON.stringify(anexos) : null,
+        anexos: (Array.isArray(anexos) && anexos.length ? anexos : null) as unknown as AnexoInfo[],
         data_ultima_atualizacao: db.fn.now(),
       });
       const atualizada = await Demanda.obterPorId(req.params.id);
@@ -114,6 +118,7 @@ class DemandaController {
     } catch (error) { next(error); }
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   static async listar(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const q = req.query as Record<string, string | undefined>;
@@ -170,6 +175,7 @@ class DemandaController {
       const demanda = await Demanda.enviarParaGestor(req.params.id, req.user.id_usuario);
       res.status(200).json({ success: true, demanda, message: 'Enviado para validação do gestor' });
       notificarMudancaStatus(demanda, 'PENDENTE_GESTOR', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'PENDENTE_GESTOR').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -180,6 +186,7 @@ class DemandaController {
       const demanda = await Demanda.validarGestor(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Demanda validada pelo gestor' });
       notificarMudancaStatus(demanda, 'VALIDADA_GESTOR', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'VALIDADA_GESTOR').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -187,9 +194,10 @@ class DemandaController {
     try {
       checkPerfil(req, GESTOR);
       const { parecer, comentario, anexos } = req.parecer!;
-      const demanda = await Demanda.devolver(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
+      const demanda = await Demanda.devolver(req.params.id, req.user.id_usuario, parecer!, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Demanda devolvida para ajustes' });
       notificarMudancaStatus(demanda, 'DEVOLVIDA_AJUSTES', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'DEVOLVIDA_AJUSTES').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -200,6 +208,7 @@ class DemandaController {
       const demanda = await Demanda.rejeitarGestor(req.params.id, req.user.id_usuario, motivo_rejeicao, parecer, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Demanda rejeitada pelo Gestor' });
       notificarMudancaStatus(demanda, 'REJEITADA', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'REJEITADA').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -217,6 +226,7 @@ class DemandaController {
       const demanda = await Demanda.enviarParaSTI(req.params.id, req.user.id_usuario);
       res.status(200).json({ success: true, demanda, message: 'Encaminhado para fila da STI' });
       notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -227,6 +237,7 @@ class DemandaController {
       const demanda = await Demanda.aprovarSTI(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Aprovado pela STI — desenvolvimento autorizado' });
       notificarMudancaStatus(demanda, 'APROVADA_STI', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'APROVADA_STI').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -237,6 +248,7 @@ class DemandaController {
       const demanda = await Demanda.reprovarSTI(req.params.id, req.user.id_usuario, motivo_rejeicao, parecer, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Reprovado pela STI' });
       notificarMudancaStatus(demanda, 'REPROVADA_STI', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'REPROVADA_STI').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -244,9 +256,10 @@ class DemandaController {
     try {
       checkPerfil(req, STI);
       const { parecer, comentario, anexos } = req.parecer!;
-      const demanda = await Demanda.solicitarAjustesSTI(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
+      const demanda = await Demanda.solicitarAjustesSTI(req.params.id, req.user.id_usuario, parecer!, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Ajustes solicitados pela STI' });
       notificarMudancaStatus(demanda, 'SOLICITADO_AJUSTES_STI', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'SOLICITADO_AJUSTES_STI').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -266,6 +279,7 @@ class DemandaController {
       const demanda = await Demanda.iniciarDesenvolvimento(req.params.id, req.user.id_usuario, req.ip);
       res.status(200).json({ success: true, demanda, message: 'Desenvolvimento iniciado' });
       notificarMudancaStatus(demanda, 'EM_DESENVOLVIMENTO', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'EM_DESENVOLVIMENTO').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -276,6 +290,7 @@ class DemandaController {
       const demanda = await Demanda.submeterProduto(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Produto submetido para homologação' });
       notificarMudancaStatus(demanda, 'SUBMETIDO_HOMOLOGACAO', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'SUBMETIDO_HOMOLOGACAO').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -288,6 +303,7 @@ class DemandaController {
       const demanda = await Demanda.validarHomologacaoGestor(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Homologação validada pelo gestor' });
       notificarMudancaStatus(demanda, 'VALIDADA_HOMOLOGACAO_GESTOR', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'VALIDADA_HOMOLOGACAO_GESTOR').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -295,9 +311,10 @@ class DemandaController {
     try {
       checkPerfil(req, GESTOR);
       const { parecer, comentario, anexos } = req.parecer!;
-      const demanda = await Demanda.devolverHomologacao(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
+      const demanda = await Demanda.devolverHomologacao(req.params.id, req.user.id_usuario, parecer!, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Produto devolvido para ajustes' });
       notificarMudancaStatus(demanda, 'DEVOLVIDA_HOMOLOGACAO', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'DEVOLVIDA_HOMOLOGACAO').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -315,6 +332,7 @@ class DemandaController {
       const demanda = await Demanda.enviarHomologacaoSTI(req.params.id, req.user.id_usuario);
       res.status(200).json({ success: true, demanda, message: 'Enviado para fila de homologação da STI' });
       notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -322,9 +340,10 @@ class DemandaController {
     try {
       checkPerfil(req, STI);
       const { parecer, comentario, anexos } = req.parecer!;
-      const demanda = await Demanda.solicitarAjustesHomologacao(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
+      const demanda = await Demanda.solicitarAjustesHomologacao(req.params.id, req.user.id_usuario, parecer!, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Ajustes no produto solicitados pela STI' });
       notificarMudancaStatus(demanda, 'SOLICITADO_AJUSTES_HOMOLOGACAO', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'SOLICITADO_AJUSTES_HOMOLOGACAO').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -335,6 +354,7 @@ class DemandaController {
       const demanda = await Demanda.homologar(req.params.id, req.user.id_usuario, parecer, comentario, tipo_deploy, id_unidade_producao, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Solução homologada pela STI' });
       notificarMudancaStatus(demanda, 'HOMOLOGADA', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'HOMOLOGADA').catch(() => {});
       if (tipo_deploy === 'OPS_DEPLOY' && id_unidade_producao && demanda) {
         notificarUnidadeProducao(demanda).catch(() => {});
       }
@@ -348,6 +368,7 @@ class DemandaController {
       const demanda = await Demanda.rejeitar(req.params.id, req.user.id_usuario, motivo_rejeicao, parecer, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Produto rejeitado na homologação' });
       notificarMudancaStatus(demanda, 'REJEITADA', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'REJEITADA').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -370,6 +391,7 @@ class DemandaController {
       const demanda = await Demanda.iniciarDeploy(req.params.id, req.user.id_usuario, req.user.id_unidade ?? null, isAdmin, parecer, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Deploy iniciado' });
       notificarMudancaStatus(demanda, 'EM_PRODUCAO', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'EM_PRODUCAO').catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -382,12 +404,35 @@ class DemandaController {
       const demanda = await Demanda.confirmarDeploy(req.params.id, req.user.id_usuario, req.user.id_unidade ?? null, isAdmin, parecer, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Deploy confirmado — solução em monitoramento' });
       notificarMudancaStatus(demanda, 'EM_MONITORAMENTO', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'EM_MONITORAMENTO').catch(() => {});
+    } catch (error) { next(error); }
+  }
+
+  static async rejeitarGestorHomologacao(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      checkPerfil(req, GESTOR);
+      const { motivo_rejeicao, parecer, anexos } = req.rejeicao!;
+      const demanda = await Demanda.rejeitarGestorHomologacao(req.params.id, req.user.id_usuario, motivo_rejeicao, parecer, req.ip, anexos);
+      res.status(200).json({ success: true, demanda, message: 'Produto rejeitado pelo Gestor na homologação' });
+      notificarMudancaStatus(demanda, 'REJEITADA', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'REJEITADA').catch(() => {});
+    } catch (error) { next(error); }
+  }
+
+  static async rejeitarAvaliadorHomologacao(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      checkPerfil(req, AVALIADOR);
+      const { motivo_rejeicao, parecer, anexos } = req.rejeicao!;
+      const demanda = await Demanda.rejeitarAvaliadorHomologacao(req.params.id, req.user.id_usuario, req.user.id_unidade ?? 0, motivo_rejeicao, parecer, req.ip, anexos);
+      res.status(200).json({ success: true, demanda, message: 'Produto rejeitado pelo Avaliador Técnico na homologação' });
+      notificarMudancaStatus(demanda, 'REJEITADA', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'REJEITADA').catch(() => {});
     } catch (error) { next(error); }
   }
 
   static async desativar(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      checkPerfil(req, STI);
+      checkPerfil(req, [...STI, 'AVALIADOR_TECNICO']);
       const { motivo } = req.cancelamento!;
       const demanda = await Demanda.desativar(req.params.id, req.user.id_usuario, motivo, req.ip);
       res.status(200).json({ success: true, demanda, message: 'Solução desativada' });
@@ -403,32 +448,29 @@ class DemandaController {
       const demanda = await Demanda.encaminharAvaliador(req.params.id, req.user.id_usuario, id_unidade, comentario, req.ip);
       res.status(200).json({ success: true, demanda, message: 'Demanda encaminhada ao Avaliador Técnico' });
       notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
     } catch (error) { next(error); }
   }
 
   static async avaliadorSolicitarAjustes(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       checkPerfil(req, AVALIADOR);
-      const { parecer, comentario, anexos } = req.body;
-      if (!parecer || parecer.trim().length < 10) {
-        const err: HttpError = new Error('Parecer obrigatório (mín. 10 caracteres)'); err.statusCode = 400; return next(err);
-      }
-      const demanda = await Demanda.avaliadorSolicitarAjustes(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
+      const { parecer, comentario, anexos } = req.parecer!;
+      const demanda = await Demanda.avaliadorSolicitarAjustes(req.params.id, req.user.id_usuario, req.user.id_unidade!, parecer!, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Ajustes solicitados ao solicitante pelo Avaliador Técnico' });
       notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
     } catch (error) { next(error); }
   }
 
   static async avaliadorDevolverAnalista(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       checkPerfil(req, AVALIADOR);
-      const { parecer, comentario, anexos } = req.body;
-      if (!parecer || parecer.trim().length < 10) {
-        const err: HttpError = new Error('Parecer obrigatório (mín. 10 caracteres)'); err.statusCode = 400; return next(err);
-      }
-      const demanda = await Demanda.avaliadorDevolverAnalista(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
+      const { parecer, comentario, anexos } = req.parecer!;
+      const demanda = await Demanda.avaliadorDevolverAnalista(req.params.id, req.user.id_usuario, req.user.id_unidade!, parecer!, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Demanda devolvida ao analista' });
       notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -441,6 +483,7 @@ class DemandaController {
       const demanda = await Demanda.encaminharDPO(req.params.id, req.user.id_usuario, comentario, req.ip);
       res.status(200).json({ success: true, demanda, message: 'Encaminhado ao DPO para análise de dados sensíveis' });
       notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -451,6 +494,7 @@ class DemandaController {
       const demanda = await Demanda.dpoAprovar(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'Aprovado pelo DPO — encaminhado à STI' });
       notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
     } catch (error) { next(error); }
   }
 
@@ -458,19 +502,101 @@ class DemandaController {
     try {
       checkPerfilPrincipal(req, DPO_ARRAY);
       const { parecer, comentario, anexos } = req.parecer!;
-      const demanda = await Demanda.dpoSolicitarAjustes(req.params.id, req.user.id_usuario, parecer, comentario, req.ip, anexos);
+      const demanda = await Demanda.dpoSolicitarAjustes(req.params.id, req.user.id_usuario, parecer!, comentario, req.ip, anexos);
       res.status(200).json({ success: true, demanda, message: 'DPO solicitou ajustes ao solicitante' });
       notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
+    } catch (error) { next(error); }
+  }
+
+  // ─── SUSPENSÃO ────────────────────────────────────────────────────────────
+
+  static async suspender(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      checkPerfil(req, SUSPENSAO);
+      const { motivo } = req.cancelamento!;
+      const todosPerfis: Perfil[] = [req.user.perfil_principal, ...(req.user.perfis_secundarios ?? [])];
+      const demanda = await Demanda.suspender(
+        req.params.id,
+        req.user.id_usuario,
+        todosPerfis,
+        req.user.id_unidade ?? null,
+        motivo,
+        req.ip,
+      );
+      res.status(200).json({ success: true, demanda, message: 'Demanda suspensa com sucesso' });
+      notificarMudancaStatus(demanda, 'SUSPENSO', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'SUSPENSO').catch(() => {});
+    } catch (error) { next(error); }
+  }
+
+  static async retornarDeSuspensao(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      checkPerfil(req, SUSPENSAO);
+      const todosPerfis: Perfil[] = [req.user.perfil_principal, ...(req.user.perfis_secundarios ?? [])];
+      const demanda = await Demanda.retornarDeSuspensao(
+        req.params.id,
+        req.user.id_usuario,
+        todosPerfis,
+        req.user.id_unidade ?? null,
+        req.ip,
+      );
+      res.status(200).json({ success: true, demanda, message: 'Demanda retomada com sucesso' });
+      notificarMudancaStatus(demanda, demanda!.status_atual, req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, demanda!.status_atual).catch(() => {});
     } catch (error) { next(error); }
   }
 
   static async cancelar(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      checkPerfil(req, ['SOLICITANTE', 'GESTOR_UNIDADE', 'ANALISTA_STI', 'GESTOR_SISTEMA']);
+      checkPerfil(req, ['SOLICITANTE', 'GESTOR_UNIDADE', 'ANALISTA_STI', 'AVALIADOR_TECNICO', 'GESTOR_SISTEMA']);
       const { motivo } = req.cancelamento!;
       const demanda = await Demanda.cancelar(req.params.id, req.user.id_usuario, motivo, req.ip);
       res.status(200).json({ success: true, demanda, message: 'Demanda cancelada' });
       notificarMudancaStatus(demanda, 'CANCELADA', req.user).catch(() => {});
+      dispararEmailMudancaStatus(demanda, 'CANCELADA').catch(() => {});
+    } catch (error) { next(error); }
+  }
+
+  static async atualizarPrioridade(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      checkPerfil(req, ['ANALISTA_STI', 'AVALIADOR_TECNICO', 'GESTOR_SISTEMA']);
+      const VALORES_VALIDOS: Prioridade[] = ['BAIXA', 'MEDIA', 'ALTA', 'CRITICA'];
+      const { prioridade } = req.body as { prioridade?: string };
+      if (!prioridade || !VALORES_VALIDOS.includes(prioridade as Prioridade)) {
+        const err: HttpError = new Error('Valor de prioridade inválido'); err.statusCode = 422; err.code = 'VALIDACAO';
+        return next(err);
+      }
+      const demanda = await Demanda.obterPorId(req.params.id);
+      if (!demanda) {
+        const err: HttpError = new Error('Demanda não encontrada'); err.statusCode = 404; err.code = 'NAO_ENCONTRADO';
+        return next(err);
+      }
+      await db('tb_demandas')
+        .where('id_demanda', req.params.id)
+        .update({ prioridade: prioridade as Prioridade, data_ultima_atualizacao: db.fn.now() });
+      res.status(200).json({ success: true, prioridade, message: 'Prioridade atualizada' });
+    } catch (error) { next(error); }
+  }
+
+  static async transferirLocacao(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      checkPerfil(req, ['GESTOR_SISTEMA', 'ANALISTA_STI']);
+
+      const { id_unidade, motivo } = req.body as { id_unidade?: number; motivo?: string };
+      if (!id_unidade) {
+        const err: HttpError = new Error('id_unidade é obrigatório');
+        err.statusCode = 422; err.code = 'VALIDACAO'; return next(err);
+      }
+      if (!motivo || motivo.trim().length < 10) {
+        const err: HttpError = new Error('motivo é obrigatório (mínimo 10 caracteres)');
+        err.statusCode = 422; err.code = 'VALIDACAO'; return next(err);
+      }
+
+      const ip = req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip;
+      await Demanda.transferirLocacao(req.params.id, id_unidade, motivo.trim(), req.user.id_usuario, ip);
+
+      res.status(200).json({ success: true, message: 'Locação transferida com sucesso' });
     } catch (error) { next(error); }
   }
 }

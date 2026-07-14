@@ -3,8 +3,8 @@ import { login } from './helpers';
 import {
   request, app, db,
   criarContextoFluxo, limparContexto, limparDemanda,
-  demandaPayload, avancarParaAPROVADA_STI, avancarParaSUBMETIDO_HOMOLOGACAO,
-  PARECER, PARECER_GESTOR, PARECER_STI,
+  demandaPayload, avancarParaSUBMETIDO_HOMOLOGACAO,
+  PARECER_GESTOR, PARECER_STI,
   criarAvaliadorTecnico, limparUsuario,
   type ContextoFluxo,
 } from './setup_helpers';
@@ -12,7 +12,6 @@ import {
 const tokens: Record<string, string> = {};
 const SIGLA = 'TDIR';
 let ctx: ContextoFluxo;
-let idAvaliador: number;
 let emailAvaliador: string;
 const demandas: Array<number | undefined> = [];
 
@@ -25,7 +24,6 @@ beforeAll(async () => {
   // Avaliador Técnico não tem seed — criamos via admin API
   const admin = await login('admin');
   const dir = await criarAvaliadorTecnico(admin);
-  idAvaliador = dir.idAvaliador;
   emailAvaliador = dir.email;
   tokens.avaliador = dir.token;
 });

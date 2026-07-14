@@ -158,6 +158,8 @@ CANCELADA (disponível até SUBMETIDO_HOMOLOGACAO)
 - `/analista` — diagnóstico de progresso e próximos passos
 - `/ux` — design system, componentes React+Tailwind, identidade visual TCE-CE
 - `/software-architect` — decisões de arquitetura, organização, refatoração
+- `/engenheiro-seguranca-agilize` — auditoria de segurança do Agilize: histórico de vulns, mapa de arquivos, padrões de correção, checklist pré-deploy, exceções aceitas
+- `/security-nodejs-react` — skill genérica e portável: vetores, padrões de correção, checklist e comandos de auditoria para qualquer projeto Node.js + Express + React
 
 ## Documentação de referência (pasta `docs/`)
 - `docs/FLUXO.md` — diagrama completo dos 23 estados **(fonte da verdade)**

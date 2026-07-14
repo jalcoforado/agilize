@@ -78,7 +78,7 @@ const ESTADO_VAZIO = {
   tec_expoe_api: false,
   tec_descricao_tech: '',
   solucao_em_uso: false,
-  dados_sensiveis: false,
+  dados_sensiveis: null,
   dados_sensiveis_desc: '',
   impacta_outras_areas: false,
   areas_impactadas: '',
@@ -160,7 +160,7 @@ function apiParaForm(demanda) {
     dep_sistemas: deps.sistemas_integrados || '',
     dep_outras: deps.outras || '',
     solucao_em_uso: !!demanda.solucao_em_uso,
-    dados_sensiveis: !!demanda.dados_sensiveis,
+    dados_sensiveis: demanda.dados_sensiveis === true || demanda.dados_sensiveis === false ? demanda.dados_sensiveis : null,
     dados_sensiveis_desc: demanda.dados_sensiveis_desc || '',
     impacta_outras_areas: !!demanda.impacta_outras_areas,
     areas_impactadas: demanda.areas_impactadas || '',
@@ -205,6 +205,36 @@ function Chk({ checked, onChange, label, children }) {
         {children}
       </div>
     </label>
+  );
+}
+
+function PerguntaCritica({ label, desc, value, onChange, erro, children }) {
+  return (
+    <div className={`rounded-xl border-2 p-4 transition ${erro ? 'border-red-400 bg-red-50' : 'border-amber-300 bg-amber-50'}`}>
+      <div className="flex items-start gap-2.5">
+        <AlertTriangle size={19} className="text-amber-600 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-bold text-neutral-800">
+            {label}<span className="text-red-500 ml-0.5">*</span>
+          </p>
+          {desc && <p className="mt-1 text-xs text-neutral-500">{desc}</p>}
+          <div className="mt-3 flex items-center gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" checked={value === true} onChange={() => onChange(true)}
+                className="h-4 w-4 text-tce-600 focus:ring-tce-500 cursor-pointer" />
+              <span className="text-sm font-medium text-neutral-700">Sim</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" checked={value === false} onChange={() => onChange(false)}
+                className="h-4 w-4 text-tce-600 focus:ring-tce-500 cursor-pointer" />
+              <span className="text-sm font-medium text-neutral-700">Não</span>
+            </label>
+          </div>
+          {children}
+          {erro && <p className="mt-2 text-[11px] text-red-600 flex items-center gap-1"><AlertCircle size={11} />{erro}</p>}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -401,12 +431,13 @@ function TecnicoOutro({ f, set, erros }) {
 }
 
 function ProgressoForm({ f }) {
-  const tecConcluida = f.tipo_solucao === 'PAINEL_BI' ? !!(f.tec_ferramenta_bi && f.tec_fontes_dados)
-    : f.tipo_solucao === 'SCRIPT' ? !!(f.tec_linguagem && f.tec_execucao && f.tec_escopo)
-      : f.tipo_solucao === 'AGENTE_IA' ? !!f.tec_provedor_llm
-        : f.tipo_solucao === 'SISTEMA_SIMPLES' ? !!f.tec_tipo_interface
-          : f.tipo_solucao === 'OUTRO' ? f.tec_descricao_tech?.length >= 20
-            : false;
+  let tecConcluida;
+  if (f.tipo_solucao === 'PAINEL_BI') tecConcluida = !!(f.tec_ferramenta_bi && f.tec_fontes_dados);
+  else if (f.tipo_solucao === 'SCRIPT') tecConcluida = !!(f.tec_linguagem && f.tec_execucao && f.tec_escopo);
+  else if (f.tipo_solucao === 'AGENTE_IA') tecConcluida = !!f.tec_provedor_llm;
+  else if (f.tipo_solucao === 'SISTEMA_SIMPLES') tecConcluida = !!f.tec_tipo_interface;
+  else if (f.tipo_solucao === 'OUTRO') tecConcluida = f.tec_descricao_tech?.length >= 20;
+  else tecConcluida = false;
 
   const passos = [
     { label: 'Tipo', ok: !!f.tipo_solucao },
@@ -468,6 +499,8 @@ function AnexosSolicitacao({ existentes, novos, onNovos, erroAnexo, setErroAnexo
   const fileRef = useRef(null);
   const total = existentes.length + novos.length;
   const vagos = MAX_ANEXOS_FORM - total;
+  const sufixoVagos = vagos !== 1 ? 's' : '';
+  const textoBotaoAnexo = total === 0 ? 'Clique para anexar documentos' : `Adicionar mais (${vagos} vaga${sufixoVagos} restante${sufixoVagos})`;
   const pode = vagos > 0;
 
   const onSelect = (e) => {
@@ -532,7 +565,7 @@ function AnexosSolicitacao({ existentes, novos, onNovos, erroAnexo, setErroAnexo
         <button type="button" onClick={() => fileRef.current?.click()}
           className="w-full border border-dashed border-neutral-300 hover:border-tce-400 hover:bg-tce-50 rounded-lg px-4 py-3 flex items-center justify-center gap-2 text-xs text-neutral-400 hover:text-tce-600 transition">
           <Paperclip size={13} />
-          {total === 0 ? 'Clique para anexar documentos' : `Adicionar mais (${vagos} vaga${vagos !== 1 ? 's' : ''} restante${vagos !== 1 ? 's' : ''})`}
+          {textoBotaoAnexo}
         </button>
       )}
       {total === MAX_ANEXOS_FORM && (
@@ -548,6 +581,15 @@ function AnexosSolicitacao({ existentes, novos, onNovos, erroAnexo, setErroAnexo
 }
 
 // ─── Página principal ──────────────────────────────────────────────────────
+function lerArquivoComoBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ nome: file.name, tamanho: file.size, tipo: file.type, conteudo: reader.result });
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function DemandaFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -582,6 +624,7 @@ export default function DemandaFormPage() {
         if (u) { setNomeUnidade(u.nome_unidade); setSiglaUnidade(u.sigla); }
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- idUnidadeUsuario intencionalmente fora (deve rodar só na montagem); revisar depois
   }, []);
 
   useEffect(() => {
@@ -592,6 +635,7 @@ export default function DemandaFormPage() {
         if (d) setNomeDepartamento(d.nome_departamento);
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- idDepartamentoUsuario/idUnidadeUsuario intencionalmente fora (deve rodar só na montagem); revisar depois
   }, []);
 
   useEffect(() => {
@@ -690,7 +734,7 @@ export default function DemandaFormPage() {
       dados_sensiveis_desc: f.dados_sensiveis && f.dados_sensiveis_desc ? f.dados_sensiveis_desc : undefined,
       impacta_outras_areas: f.impacta_outras_areas,
       areas_impactadas: f.impacta_outras_areas && f.areas_impactadas ? f.areas_impactadas : undefined,
-      usa_ia_desenvolvimento: f.tipo_solucao !== 'AGENTE_IA' ? f.usa_ia_desenvolvimento : undefined,
+      usa_ia_desenvolvimento: f.tipo_solucao === 'AGENTE_IA' ? true : f.usa_ia_desenvolvimento,
     };
   };
 
@@ -706,6 +750,7 @@ export default function DemandaFormPage() {
     if (!f.publico_alvo || f.publico_alvo.length < 10) e.publico_alvo = 'Mínimo 10 caracteres';
     if (!f.frequencia_uso) e.frequencia_uso = 'Selecione a frequência';
     if (!f.quantidade_usuarios_estimada || parseInt(f.quantidade_usuarios_estimada) < 1) e.quantidade_usuarios_estimada = 'Informe pelo menos 1';
+    if (f.dados_sensiveis !== true && f.dados_sensiveis !== false) e.dados_sensiveis = 'Selecione Sim ou Não';
     if (f.tipo_solucao === 'PAINEL_BI') {
       if (!f.tec_ferramenta_bi) e.tec_ferramenta_bi = 'Selecione a ferramenta';
       if (!f.tec_fontes_dados) e.tec_fontes_dados = 'Descreva as fontes de dados';
@@ -734,12 +779,7 @@ export default function DemandaFormPage() {
     setSalvando(true); setErroGeral('');
     try {
       const novosBase64 = arquivosNovos.length
-        ? await Promise.all(arquivosNovos.map(f => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve({ nome: f.name, tamanho: f.size, tipo: f.type, conteudo: reader.result });
-            reader.onerror = reject;
-            reader.readAsDataURL(f);
-          })))
+        ? await Promise.all(arquivosNovos.map(lerArquivoComoBase64))
         : [];
       const todosAnexos = [...arquivosExistentes, ...novosBase64];
       const payload = { ...buildPayload(), ...(todosAnexos.length ? { anexos: todosAnexos } : {}) };
@@ -771,6 +811,23 @@ export default function DemandaFormPage() {
 
   const tipoInfo = TIPOS_SOLUCAO.find(t => t.value === f.tipo_solucao);
   const voltarUrl = modoEdicao ? `/demanda/${id}` : '/dashboard';
+
+  let placeholderTitulo;
+  if (tipoInfo?.value === 'AGENTE_IA') placeholderTitulo = 'Ex: Agente de análise de contratos com Claude';
+  else if (tipoInfo?.value === 'PAINEL_BI') placeholderTitulo = 'Ex: Painel de acompanhamento de licitações — GEFIN';
+  else placeholderTitulo = 'Descreva brevemente a solução';
+
+  let textoUnidade;
+  if (siglaUnidade && nomeUnidade) textoUnidade = `${siglaUnidade} — ${nomeUnidade}`;
+  else if (nomeUnidade) textoUnidade = nomeUnidade;
+  else textoUnidade = idUnidadeUsuario ? 'Carregando...' : 'Não vinculado';
+
+  const textoDepartamento = nomeDepartamento || (idDepartamentoUsuario ? 'Carregando...' : 'Não vinculado');
+
+  let textoBotaoSalvar;
+  if (salvando) textoBotaoSalvar = 'Salvando...';
+  else if (modoEdicao) textoBotaoSalvar = 'Salvar alterações';
+  else textoBotaoSalvar = 'Criar solicitação';
 
   return (
     <Layout>
@@ -839,7 +896,7 @@ export default function DemandaFormPage() {
                 hint="Seja específico — o título aparece em todas as listagens e notificações">
                 <input className={ic(erros.titulo)} value={f.titulo}
                   onChange={e => set('titulo', e.target.value)} maxLength={255}
-                  placeholder={tipoInfo?.value === 'AGENTE_IA' ? 'Ex: Agente de análise de contratos com Claude' : tipoInfo?.value === 'PAINEL_BI' ? 'Ex: Painel de acompanhamento de licitações — GEFIN' : 'Descreva brevemente a solução'} />
+                  placeholder={placeholderTitulo} />
                 <p className="text-right text-[11px] text-neutral-400 mt-0.5">{f.titulo.length}/255</p>
               </Campo>
 
@@ -851,14 +908,12 @@ export default function DemandaFormPage() {
                 </Campo>
                 <Campo label="Unidade" obrigatorio erro={erros.id_unidade}>
                   <div className={`${ic(erros.id_unidade || !idUnidadeUsuario)} cursor-default ${(erros.id_unidade || !idUnidadeUsuario) ? 'text-red-600' : 'bg-neutral-50 text-neutral-500'}`}>
-                    {siglaUnidade && nomeUnidade
-                      ? `${siglaUnidade} — ${nomeUnidade}`
-                      : nomeUnidade || (idUnidadeUsuario ? 'Carregando...' : 'Não vinculado')}
+                    {textoUnidade}
                   </div>
                 </Campo>
                 <Campo label="Departamento" obrigatorio erro={erros.id_departamento}>
                   <div className={`${ic(erros.id_departamento || !idDepartamentoUsuario)} cursor-default ${(erros.id_departamento || !idDepartamentoUsuario) ? 'text-red-600' : 'bg-neutral-50 text-neutral-500'}`}>
-                    {nomeDepartamento || (idDepartamentoUsuario ? 'Carregando...' : 'Não vinculado')}
+                    {textoDepartamento}
                   </div>
                 </Campo>
               </div>
@@ -927,22 +982,6 @@ export default function DemandaFormPage() {
                 />
 
                 <Chk
-                  checked={f.dados_sensiveis}
-                  onChange={v => set('dados_sensiveis', v)}
-                  label="Envolve dados sensíveis ou protegidos (LGPD, sigilo funcional, dados de saúde)"
-                >
-                  {f.dados_sensiveis && (
-                    <textarea
-                      className={`mt-1.5 ${ic()} resize-none`}
-                      rows={2}
-                      value={f.dados_sensiveis_desc}
-                      onChange={e => set('dados_sensiveis_desc', e.target.value)}
-                      placeholder="Descreva o tipo de dado (ex: CPF, dados de saúde, sigilo funcional — LGPD Art. 5º)"
-                    />
-                  )}
-                </Chk>
-
-                <Chk
                   checked={f.impacta_outras_areas}
                   onChange={v => set('impacta_outras_areas', v)}
                   label="Impacta outras áreas além da unidade solicitante"
@@ -956,6 +995,24 @@ export default function DemandaFormPage() {
                     />
                   )}
                 </Chk>
+
+                <PerguntaCritica
+                  label="Esta solução envolve dados sensíveis ou protegidos?"
+                  desc="Considere CPF, RG, dados de saúde, informações financeiras, sigilo funcional ou qualquer dado que identifique uma pessoa (LGPD, Art. 5º)."
+                  value={f.dados_sensiveis}
+                  onChange={v => set('dados_sensiveis', v)}
+                  erro={erros.dados_sensiveis}
+                >
+                  {f.dados_sensiveis === true && (
+                    <textarea
+                      className={`mt-3 ${ic()} resize-none`}
+                      rows={2}
+                      value={f.dados_sensiveis_desc}
+                      onChange={e => set('dados_sensiveis_desc', e.target.value)}
+                      placeholder="Descreva o tipo de dado (ex: CPF, dados de saúde, sigilo funcional — LGPD Art. 5º)"
+                    />
+                  )}
+                </PerguntaCritica>
 
                 {f.tipo_solucao !== 'AGENTE_IA' && (
                   <Chk
@@ -1046,7 +1103,7 @@ export default function DemandaFormPage() {
               <button type="submit" disabled={salvando}
                 className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold bg-tce-700 text-white rounded-lg hover:bg-tce-800 active:bg-tce-900 focus:outline-none focus:ring-2 focus:ring-tce-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition">
                 <Save size={15} />
-                {salvando ? 'Salvando...' : modoEdicao ? 'Salvar alterações' : 'Criar solicitação'}
+                {textoBotaoSalvar}
               </button>
             </div>
 

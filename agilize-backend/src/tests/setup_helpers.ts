@@ -4,8 +4,11 @@ import type { Knex } from 'knex';
 dotenv.config({ path: '.env.test', override: true });
 process.env.NODE_ENV = 'test';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const app = require('../index').default;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const db = require('../db/connection').default as Knex;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const request = require('supertest');
 
 // ─── Payloads reutilizáveis ───────────────────────────────────────────────────
@@ -45,7 +48,6 @@ export interface ContextoFluxo {
 export async function criarContextoFluxo(sigla: string): Promise<ContextoFluxo> {
   let idUnidade: number | string;
   let idDept: number | string;
-  let idAtribuicao: number | string;
 
   // Departamento é raiz — criar primeiro
   const deptNome = `Dept Teste ${sigla}`;
@@ -85,7 +87,7 @@ export async function criarContextoFluxo(sigla: string): Promise<ContextoFluxo> 
     id_usuario_criacao: gestorUser.id_usuario,
     ativo: true,
   }).returning('id_atribuicao');
-  idAtribuicao = atrib.id_atribuicao;
+  const idAtribuicao = atrib.id_atribuicao;
 
   return { idUnidade, idDept, idAtribuicao };
 }
