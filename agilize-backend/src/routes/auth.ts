@@ -48,9 +48,10 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
     const signOptions: jwt.SignOptions = {
       expiresIn: (process.env.JWT_EXPIRE || '30m') as jwt.SignOptions['expiresIn'],
     };
-    const perfisSecundarios: string[] = Array.isArray(usuario.perfis_secundarios)
-      ? usuario.perfis_secundarios
-      : (typeof usuario.perfis_secundarios === 'string' ? JSON.parse(usuario.perfis_secundarios) : []);
+    let perfisSecundarios: string[];
+    if (Array.isArray(usuario.perfis_secundarios)) perfisSecundarios = usuario.perfis_secundarios;
+    else if (typeof usuario.perfis_secundarios === 'string') perfisSecundarios = JSON.parse(usuario.perfis_secundarios);
+    else perfisSecundarios = [];
 
     const token = jwt.sign(
       {
@@ -89,7 +90,7 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
 });
 
 // Refresh Token
-router.post('/refresh-token', (req: Request, res: Response, next: NextFunction) => {
+router.post('/refresh-token', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader?.split(' ')[1];
@@ -100,20 +101,43 @@ router.post('/refresh-token', (req: Request, res: Response, next: NextFunction) 
       throw err;
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string, { ignoreExpiration: true }) as AuthUser;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string, { algorithms: ['HS256'], ignoreExpiration: true }) as AuthUser;
+
+    const usuario = await db('tb_usuarios as u')
+      .leftJoin('tb_unidades as un', 'u.id_unidade', 'un.id_unidade')
+      .leftJoin('tb_departamentos as d', 'u.id_departamento', 'd.id_departamento')
+      .select(
+        'u.id_usuario', 'u.nome', 'u.email',
+        'u.perfil_principal', 'u.perfis_secundarios', 'u.ativo',
+        'u.id_unidade', 'u.id_departamento'
+      )
+      .where('u.id_usuario', decoded.id_usuario)
+      .where('u.ativo', true)
+      .first();
+
+    if (!usuario) {
+      const err: HttpError = new Error('Acesso revogado');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    let perfisSecundarios: string[];
+    if (Array.isArray(usuario.perfis_secundarios)) perfisSecundarios = usuario.perfis_secundarios;
+    else if (typeof usuario.perfis_secundarios === 'string') perfisSecundarios = JSON.parse(usuario.perfis_secundarios);
+    else perfisSecundarios = [];
 
     const signOptions: jwt.SignOptions = {
       expiresIn: (process.env.JWT_EXPIRE || '30m') as jwt.SignOptions['expiresIn'],
     };
     const novoToken = jwt.sign(
       {
-        id_usuario: decoded.id_usuario,
-        email: decoded.email,
-        nome: decoded.nome,
-        perfil_principal: decoded.perfil_principal,
-        perfis_secundarios: decoded.perfis_secundarios ?? [],
-        id_unidade: decoded.id_unidade,
-        id_departamento: decoded.id_departamento,
+        id_usuario: usuario.id_usuario,
+        email: usuario.email,
+        nome: usuario.nome,
+        perfil_principal: usuario.perfil_principal,
+        perfis_secundarios: perfisSecundarios,
+        id_unidade: usuario.id_unidade,
+        id_departamento: usuario.id_departamento,
       },
       process.env.JWT_SECRET as string,
       signOptions
@@ -130,7 +154,7 @@ router.post('/refresh-token', (req: Request, res: Response, next: NextFunction) 
 });
 
 // Logout (apenas registra no cliente)
-router.post('/logout', (req: Request, res: Response) => {
+router.post('/logout', (_req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     message: 'Logout realizado com sucesso',

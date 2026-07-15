@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, RefreshCw, ArrowRight, Search, Filter, X
+  Plus, RefreshCw, ArrowRight, Search, Filter, X,
+  ArrowLeftRight, Check, Loader2,
 } from 'lucide-react';
 import { demandaService, adminService } from '../services/api';
 import Layout from '../components/Layout';
@@ -46,19 +47,89 @@ const STATUS_LABELS = {
   CANCELADA: 'Cancelada',
 };
 
-const PRIORIDADE_CLASSES = {
-  CRITICA: 'text-red-600 font-semibold',
-  ALTA:    'text-orange-600',
-  MEDIA:   'text-yellow-700',
-  BAIXA:   'text-green-700',
+
+const PRIORIDADE_CONFIG = {
+  BAIXA:   { label: 'Baixa',   cls: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200'  },
+  MEDIA:   { label: 'Média',   cls: 'text-yellow-700', bg: 'bg-yellow-50', border: 'border-yellow-200' },
+  ALTA:    { label: 'Alta',    cls: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200' },
+  CRITICA: { label: 'Crítica', cls: 'text-red-700',    bg: 'bg-red-50',    border: 'border-red-200'    },
 };
 
-const PRIORIDADE_LABELS = {
-  CRITICA: 'Crítica',
-  ALTA:    'Alta',
-  MEDIA:   'Média',
-  BAIXA:   'Baixa',
-};
+const PERFIS_EDICAO_PRIORIDADE = ['ANALISTA_STI', 'AVALIADOR_TECNICO', 'GESTOR_SISTEMA'];
+
+// ─── Prioridade inline-editável ───────────────────────────────────────────────
+
+function InlineEditPrioridade({ idDemanda, valor, podeEditar, onAtualizar }) {
+  const [aberto, setAberto] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const ref = useRef(null);
+  const cfg = PRIORIDADE_CONFIG[valor] || PRIORIDADE_CONFIG.MEDIA;
+
+  useEffect(() => {
+    if (!aberto) return;
+    function fechar(e) {
+      if (ref.current && !ref.current.contains(e.target)) setAberto(false);
+    }
+    document.addEventListener('mousedown', fechar);
+    return () => document.removeEventListener('mousedown', fechar);
+  }, [aberto]);
+
+  async function selecionar(nova) {
+    if (nova === valor) { setAberto(false); return; }
+    setSalvando(true);
+    setAberto(false);
+    try {
+      await demandaService.atualizarPrioridade(idDemanda, nova);
+      onAtualizar(idDemanda, nova);
+    } catch {
+      // silencia — badge reverte
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="relative inline-flex items-center gap-1.5"
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Texto colorido atual */}
+      <span className={`text-xs font-medium ${cfg.cls}`}>
+        {salvando ? <Loader2 size={11} className="animate-spin inline" /> : cfg.label}
+      </span>
+
+      {/* Botão de troca — aparece apenas no hover da linha */}
+      {podeEditar && !salvando && (
+        <button
+          onClick={() => setAberto(v => !v)}
+          title="Alterar prioridade"
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-neutral-400 hover:text-tce-600 hover:bg-tce-50"
+        >
+          <ArrowLeftRight size={12} />
+        </button>
+      )}
+
+      {/* Dropdown */}
+      {aberto && (
+        <div className="absolute z-20 top-full mt-1 left-0 bg-white border border-neutral-200 rounded-xl shadow-lg min-w-[130px] py-1 overflow-hidden">
+          {Object.entries(PRIORIDADE_CONFIG).map(([key, c]) => (
+            <button
+              key={key}
+              onClick={() => selecionar(key)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs hover:bg-neutral-50 transition"
+            >
+              <span className={`inline-flex items-center font-semibold px-2 py-0.5 rounded-full border ${c.bg} ${c.cls} ${c.border}`}>
+                {c.label}
+              </span>
+              {key === valor && <Check size={11} className="text-tce-600 shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function saudacao() {
   const h = new Date().getHours();
@@ -78,9 +149,10 @@ export default function DashboardPage() {
 
   const [demandas, setDemandas] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const PERFIS_DEFAULT_TODAS = ['GESTOR_SISTEMA', 'SOLICITANTE', 'AVALIADOR_TECNICO', 'GESTOR_DEPARTAMENTO', 'GESTOR_UNIDADE'];
+  // Só defaulta em 'todas' quando NENHUM perfil do usuário tem a aba "Para minha ação"
+  const PERFIS_SEM_ABA_ACAO = ['GESTOR_SISTEMA', 'GESTOR_DEPARTAMENTO', 'SOLICITANTE'];
   const [quickFilter, setQuickFilter] = useState(
-    todosPerfis.some(p => PERFIS_DEFAULT_TODAS.includes(p)) ? 'todas' : 'acao'
+    todosPerfis.every(p => PERFIS_SEM_ABA_ACAO.includes(p)) ? 'todas' : 'acao'
   );
   const DPO_ESTADOS_ESPERA = ['AGUARDANDO_DPO', 'AGUARDANDO_DPO_HOMOLOGACAO'];
   const [busca, setBusca] = useState('');
@@ -103,6 +175,7 @@ export default function DashboardPage() {
   const mostraSolicitante = mostraUnidade || todosPerfis.includes('GESTOR_UNIDADE');
 
   const acoesDoPerfl = [...new Set(todosPerfis.flatMap(p => ACOES_POR_PERFIL[p] || []))];
+  const podeEditarPrioridade = todosPerfis.some(p => PERFIS_EDICAO_PRIORIDADE.includes(p));
 
   // Carrega departamentos e unidades para filtros
   useEffect(() => {
@@ -111,6 +184,7 @@ export default function DashboardPage() {
     if (mostraDept) {
       adminService.listarDepartamentos().then(({ data }) => setDepartamentos(data.departamentos || [])).catch(() => {});
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deve rodar só na montagem; revisar se precisa reagir a mudança de perfil (TODO)
   }, []);
 
   // Unidades filtradas pelo departamento selecionado (nova hierarquia: unidade.id_departamento)
@@ -152,10 +226,17 @@ export default function DashboardPage() {
     } finally {
       setCarregando(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- DPO_ESTADOS_ESPERA/acoesDoPerfl/perfil intencionalmente fora (revisar depois)
   }, [pagina, quickFilter, filtroStatus, filtroDepartamento, filtroUnidade, filtroSolicitante]);
 
   useEffect(() => { setPagina(1); }, [quickFilter, filtroStatus, filtroDepartamento, filtroUnidade, filtroSolicitante]);
   useEffect(() => { carregar(); }, [carregar]);
+
+  function handleAtualizarPrioridade(id, nova) {
+    setDemandas(prev => prev.map(d =>
+      d.id_demanda === id ? { ...d, prioridade: nova } : d
+    ));
+  }
 
   const demandasFiltradas = busca
     ? demandas.filter(d =>
@@ -168,6 +249,101 @@ export default function DashboardPage() {
   const podeVerTodas = todosPerfis.some(p => ['ANALISTA_STI', 'AVALIADOR_TECNICO', 'RESPONSAVEL_PRODUCAO', 'GESTOR_SISTEMA', 'GESTOR_UNIDADE', 'GESTOR_DEPARTAMENTO'].includes(p));
 
   const primeiroNome = usuario.nome?.split(' ')[0] || 'Usuário';
+
+  let mensagemListaVazia;
+  if (temFiltrosAtivos) mensagemListaVazia = 'Nenhuma demanda com os filtros aplicados';
+  else if (quickFilter === 'acao') mensagemListaVazia = 'Nenhuma demanda aguardando sua ação';
+  else if (quickFilter === 'analisadas') mensagemListaVazia = 'Nenhuma demanda analisada ainda';
+  else if (perfil === 'SOLICITANTE') mensagemListaVazia = 'Você ainda não criou nenhuma solução';
+  else mensagemListaVazia = 'Nenhuma demanda encontrada';
+
+  let conteudoDemandas;
+  if (carregando) {
+    conteudoDemandas = (
+      <div className="py-16 flex flex-col items-center justify-center gap-3 text-neutral-400">
+        <RefreshCw size={20} className="animate-spin" />
+        <span className="text-sm">Carregando...</span>
+      </div>
+    );
+  } else if (demandasFiltradas.length === 0) {
+    conteudoDemandas = (
+      <div className="py-16 flex flex-col items-center justify-center gap-2 text-neutral-400">
+        <Search size={28} className="opacity-50" />
+        <p className="text-sm">
+          {mensagemListaVazia}
+        </p>
+        {podeCriar && perfil === 'SOLICITANTE' && (
+          <button
+            onClick={() => navigate('/demanda/nova')}
+            className="mt-2 text-tce-600 text-sm font-medium hover:underline flex items-center gap-1"
+          >
+            Criar primeira solução <ArrowRight size={13} />
+          </button>
+        )}
+        {temFiltrosAtivos && (
+          <button
+            onClick={limparFiltros}
+            className="mt-1 text-xs text-neutral-500 hover:text-neutral-700 underline"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+    );
+  } else {
+    conteudoDemandas = (
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-neutral-100 bg-neutral-50 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+              <th className="px-4 py-3">Número</th>
+              <th className="px-4 py-3">Título</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Prioridade</th>
+              <th className="px-4 py-3">Criada em</th>
+              <th className="px-4 py-3 w-8"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100">
+            {demandasFiltradas.map(demanda => (
+              <tr
+                key={demanda.id_demanda}
+                onClick={() => navigate(`/demanda/${demanda.id_demanda}`)}
+                className="hover:bg-neutral-50 cursor-pointer transition-colors group"
+              >
+                <td className="px-4 py-3 font-mono text-xs text-neutral-400 whitespace-nowrap">
+                  {demanda.numero_demanda}
+                </td>
+                <td className="px-4 py-3 text-sm text-neutral-800 max-w-xs">
+                  <span className="line-clamp-1 font-medium">{demanda.titulo}</span>
+                  {demanda.nome_unidade && (
+                    <span className="text-[11px] text-neutral-400 block mt-0.5">{demanda.nome_unidade}</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <StatusBadge status={demanda.status_atual} />
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <InlineEditPrioridade
+                    idDemanda={demanda.id_demanda}
+                    valor={demanda.prioridade || 'MEDIA'}
+                    podeEditar={podeEditarPrioridade}
+                    onAtualizar={handleAtualizarPrioridade}
+                  />
+                </td>
+                <td className="px-4 py-3 text-xs text-neutral-400 whitespace-nowrap">
+                  {new Date(demanda.data_criacao).toLocaleDateString('pt-BR')}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <ArrowRight size={14} className="text-neutral-300 group-hover:text-tce-600 transition-colors ml-auto" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   return (
     <Layout>
@@ -373,87 +549,7 @@ export default function DashboardPage() {
           )}
 
           {/* Conteúdo */}
-          {carregando ? (
-            <div className="py-16 flex flex-col items-center justify-center gap-3 text-neutral-400">
-              <RefreshCw size={20} className="animate-spin" />
-              <span className="text-sm">Carregando...</span>
-            </div>
-          ) : demandasFiltradas.length === 0 ? (
-            <div className="py-16 flex flex-col items-center justify-center gap-2 text-neutral-400">
-              <Search size={28} className="opacity-50" />
-              <p className="text-sm">
-                {temFiltrosAtivos ? 'Nenhuma demanda com os filtros aplicados'
-                  : quickFilter === 'acao' ? 'Nenhuma demanda aguardando sua ação'
-                  : quickFilter === 'analisadas' ? 'Nenhuma demanda analisada ainda'
-                  : perfil === 'SOLICITANTE' ? 'Você ainda não criou nenhuma solução'
-                  : 'Nenhuma demanda encontrada'}
-              </p>
-              {podeCriar && perfil === 'SOLICITANTE' && (
-                <button
-                  onClick={() => navigate('/demanda/nova')}
-                  className="mt-2 text-tce-600 text-sm font-medium hover:underline flex items-center gap-1"
-                >
-                  Criar primeira solução <ArrowRight size={13} />
-                </button>
-              )}
-              {temFiltrosAtivos && (
-                <button
-                  onClick={limparFiltros}
-                  className="mt-1 text-xs text-neutral-500 hover:text-neutral-700 underline"
-                >
-                  Limpar filtros
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-neutral-100 bg-neutral-50 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">
-                    <th className="px-4 py-3">Número</th>
-                    <th className="px-4 py-3">Título</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Prioridade</th>
-                    <th className="px-4 py-3">Criada em</th>
-                    <th className="px-4 py-3 w-8"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {demandasFiltradas.map(demanda => (
-                    <tr
-                      key={demanda.id_demanda}
-                      onClick={() => navigate(`/demanda/${demanda.id_demanda}`)}
-                      className="hover:bg-neutral-50 cursor-pointer transition-colors group"
-                    >
-                      <td className="px-4 py-3 font-mono text-xs text-neutral-400 whitespace-nowrap">
-                        {demanda.numero_demanda}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-neutral-800 max-w-xs">
-                        <span className="line-clamp-1 font-medium">{demanda.titulo}</span>
-                        {demanda.nome_unidade && (
-                          <span className="text-[11px] text-neutral-400 block mt-0.5">{demanda.nome_unidade}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <StatusBadge status={demanda.status_atual} />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-xs ${PRIORIDADE_CLASSES[demanda.prioridade] || 'text-neutral-500'}`}>
-                          {PRIORIDADE_LABELS[demanda.prioridade] || demanda.prioridade}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-neutral-400 whitespace-nowrap">
-                        {new Date(demanda.data_criacao).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <ArrowRight size={14} className="text-neutral-300 group-hover:text-tce-600 transition-colors ml-auto" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {conteudoDemandas}
 
           <Pagination
             pagina={pagina}

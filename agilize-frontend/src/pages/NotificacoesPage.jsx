@@ -36,6 +36,7 @@ export default function NotificacoesPage() {
     setPagina(1);
   }, [apenasNaoLidas]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- carregar não é memoizada; incluí-la reexecutaria a cada render (revisar depois)
   useEffect(() => { carregar(); }, [pagina, apenasNaoLidas]);
 
   const navegarParaDemanda = (notif) => {
@@ -83,6 +84,51 @@ export default function NotificacoesPage() {
 
   const naoLidasCount = notificacoes.filter(n => !n.lido).length;
 
+  let conteudoNotificacoes;
+  if (carregando) {
+    conteudoNotificacoes = <div className="text-center py-12 text-gray-500 text-sm">Carregando...</div>;
+  } else if (notificacoes.length === 0) {
+    conteudoNotificacoes = (
+      <div className="text-center py-12">
+        <Bell className="mx-auto text-gray-300 mb-3" size={40} />
+        <p className="text-gray-500 text-sm">Nenhuma notificação</p>
+      </div>
+    );
+  } else {
+    conteudoNotificacoes = (
+      <div className="space-y-1">
+        {notificacoes.map(notif => (
+          <div
+            key={notif.id_notificacao}
+            onClick={() => marcarLida(notif)}
+            className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition ${
+              notif.lido
+                ? 'bg-white border-gray-100 hover:bg-gray-50'
+                : 'bg-blue-50 border-blue-100 hover:bg-blue-100'
+            }`}
+          >
+            <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${notif.lido ? 'bg-gray-300' : 'bg-blue-500'}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-medium ${notif.lido ? 'text-gray-700' : 'text-gray-900'}`}>
+                {notif.titulo_notificacao}
+              </p>
+              {notif.mensagem_notificacao && (
+                <p className="text-xs text-gray-500 mt-0.5 truncate">{notif.mensagem_notificacao}</p>
+              )}
+              <div className="flex items-center gap-2 mt-1">
+                {notif.numero_demanda && (
+                  <span className="text-xs font-mono text-gray-400">{notif.numero_demanda}</span>
+                )}
+                <span className="text-xs text-gray-400">{dataRelativa(notif.data_criacao)}</span>
+              </div>
+            </div>
+            {notif.link_acao && <ExternalLink size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <Layout>
       <div className="p-6 max-w-3xl mx-auto">
@@ -124,45 +170,7 @@ export default function NotificacoesPage() {
           </button>
         </div>
 
-        {carregando ? (
-          <div className="text-center py-12 text-gray-500 text-sm">Carregando...</div>
-        ) : notificacoes.length === 0 ? (
-          <div className="text-center py-12">
-            <Bell className="mx-auto text-gray-300 mb-3" size={40} />
-            <p className="text-gray-500 text-sm">Nenhuma notificação</p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {notificacoes.map(notif => (
-              <div
-                key={notif.id_notificacao}
-                onClick={() => marcarLida(notif)}
-                className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition ${
-                  notif.lido
-                    ? 'bg-white border-gray-100 hover:bg-gray-50'
-                    : 'bg-blue-50 border-blue-100 hover:bg-blue-100'
-                }`}
-              >
-                <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${notif.lido ? 'bg-gray-300' : 'bg-blue-500'}`} />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${notif.lido ? 'text-gray-700' : 'text-gray-900'}`}>
-                    {notif.titulo_notificacao}
-                  </p>
-                  {notif.mensagem_notificacao && (
-                    <p className="text-xs text-gray-500 mt-0.5 truncate">{notif.mensagem_notificacao}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1">
-                    {notif.numero_demanda && (
-                      <span className="text-xs font-mono text-gray-400">{notif.numero_demanda}</span>
-                    )}
-                    <span className="text-xs text-gray-400">{dataRelativa(notif.data_criacao)}</span>
-                  </div>
-                </div>
-                {notif.link_acao && <ExternalLink size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />}
-              </div>
-            ))}
-          </div>
-        )}
+        {conteudoNotificacoes}
 
         <Pagination
           pagina={pagina}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { useParams, useNavigate } from 'react-router-dom';
-import { demandaService, usuarioService } from '../services/api';
+import { demandaService, usuarioService, adminService } from '../services/api';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
@@ -8,9 +9,9 @@ import FormParecer from '../components/FormParecer';
 import {
   ArrowLeft, AlertTriangle, CheckCircle, XCircle,
   Loader2, ChevronDown, ChevronUp, Server, Info,
-  RotateCcw, Clock, FileText, File, UserCheck, Shield, ShieldCheck,
-  Code2, PackageCheck, Rocket, Activity, Ban, Pencil,
-  X, Download, Paperclip,
+  RotateCcw, FileText, File, UserCheck, Shield, ShieldCheck,
+  Code2, PackageCheck, Rocket, Ban, Pencil,
+  X, Download, Paperclip, ArrowLeftRight,
 } from 'lucide-react';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -33,7 +34,10 @@ const FASES = [
   { num: 4, label: 'Produção' },
 ];
 
-function getFaseAtual(status) {
+function getFaseAtual(status, demanda = null) {
+  if (status === 'SUSPENSO' && demanda?.status_antes_suspensao) {
+    return getFaseAtual(demanda.status_antes_suspensao);
+  }
   if (['DRAFT', 'PENDENTE_GESTOR', 'DEVOLVIDA_AJUSTES', 'SOLICITANTE_AJUSTANDO',
     'VALIDADA_GESTOR', 'AGUARDANDO_DPO', 'FILA_STI', 'AGUARDANDO_AVALIADOR', 'APROVADA_STI',
     'REPROVADA_STI', 'REJEITADA', 'SOLICITADO_AJUSTES_STI'].includes(status)) return 1;
@@ -49,6 +53,7 @@ const CANCELAVEIS = [
   'DRAFT', 'PENDENTE_GESTOR', 'DEVOLVIDA_AJUSTES', 'SOLICITANTE_AJUSTANDO',
   'VALIDADA_GESTOR', 'FILA_STI', 'SOLICITADO_AJUSTES_STI',
   'APROVADA_STI', 'EM_DESENVOLVIMENTO', 'SUBMETIDO_HOMOLOGACAO',
+  'SUSPENSO',
 ];
 
 function getAcoesDisponiveis(usuario, demanda, historico = []) {
@@ -118,12 +123,14 @@ function getAcoesDisponiveis(usuario, demanda, historico = []) {
       add({ id: 'solicitar-ajustes-sti', label: 'Solicitar Ajustes', tipo: 'parecer', variante: 'warning' });
       add({ id: 'reprovar-sti', label: 'Reprovar', tipo: 'rejeicao', variante: 'danger' });
       add({ id: 'encaminhar-avaliador', label: 'Encaminhar ao Avaliador Técnico', tipo: 'encaminhar-avaliador', variante: 'primary' });
+      add({ id: 'suspender', label: 'Suspender Demanda', tipo: 'motivo', variante: 'neutral' });
     }
     if (s === 'FILA_HOMOLOGACAO_STI') {
       add({ id: 'homologar', label: 'Homologar', tipo: 'homologar', variante: 'success' });
       add({ id: 'solicitar-ajustes-homologacao', label: 'Solicitar Ajustes', tipo: 'parecer', variante: 'warning' });
       add({ id: 'rejeitar-homologacao', label: 'Rejeitar Produto', tipo: 'rejeicao', variante: 'danger' });
       add({ id: 'encaminhar-avaliador-hom', label: 'Encaminhar ao Avaliador Técnico', tipo: 'encaminhar-avaliador', variante: 'primary' });
+      add({ id: 'suspender', label: 'Suspender Demanda', tipo: 'motivo', variante: 'neutral' });
     }
   }
 
@@ -138,10 +145,12 @@ function getAcoesDisponiveis(usuario, demanda, historico = []) {
     if (ehAvaliadorFase1 || (isAdmin && s === 'AGUARDANDO_AVALIADOR')) {
       add({ id: 'avaliador-solicitar-ajustes', label: 'Solicitar Ajustes ao Solicitante', tipo: 'parecer', variante: 'warning' });
       add({ id: 'avaliador-devolver-analista', label: 'Devolver ao Analista', tipo: 'parecer', variante: 'primary' });
+      add({ id: 'suspender', label: 'Suspender Demanda', tipo: 'motivo', variante: 'neutral' });
     }
     if (ehAvaliadorFase3 || (isAdmin && s === 'AGUARDANDO_AVALIADOR_HOMOLOGACAO')) {
       add({ id: 'avaliador-solicitar-ajustes', label: 'Solicitar Ajustes ao Solicitante', tipo: 'parecer', variante: 'warning' });
       add({ id: 'avaliador-devolver-analista', label: 'Devolver ao Analista (Hom.)', tipo: 'parecer', variante: 'primary' });
+      add({ id: 'suspender', label: 'Suspender Demanda', tipo: 'motivo', variante: 'neutral' });
     }
   }
 
@@ -173,6 +182,16 @@ function getAcoesDisponiveis(usuario, demanda, historico = []) {
   if ((todosPerfis.some(p => ['ANALISTA_STI', 'RESPONSAVEL_PRODUCAO'].includes(p)) || isAdmin) && s === 'EM_MONITORAMENTO')
     add({ id: 'desativar', label: 'Desativar Solução', tipo: 'motivo', variante: 'danger' });
 
+  // ── Suspensão — retorno ──────────────────────────────────────────────
+  if (s === 'SUSPENSO') {
+    const ehAvaliadorDesignado = todosPerfis.includes('AVALIADOR_TECNICO') &&
+      demanda.id_unidade_avaliador &&
+      Number(demanda.id_unidade_avaliador) === Number(usuario.id_unidade);
+    const podeRetornar = todosPerfis.includes('ANALISTA_STI') || isAdmin || ehAvaliadorDesignado;
+    if (podeRetornar)
+      add({ id: 'retornar-suspensao', label: 'Retomar Demanda', tipo: 'confirmar', variante: 'primary' });
+  }
+
   // ── Cancelamento ─────────────────────────────────────────────────────
   const podeCancelar = ['SOLICITANTE', 'GESTOR_UNIDADE', 'ANALISTA_STI'];
   if ((todosPerfis.some(pf => podeCancelar.includes(pf)) || isAdmin) && CANCELAVEIS.includes(s))
@@ -181,41 +200,46 @@ function getAcoesDisponiveis(usuario, demanda, historico = []) {
   return [...map.values()];
 }
 
-async function executarAcao(idDemanda, acaoId, { parecer, comentario, motivo, tipo_deploy, id_unidade_producao, id_unidade_avaliador, anexos }) {
-  switch (acaoId) {
-    case 'enviar-gestor': return demandaService.enviarParaGestor(idDemanda);
-    case 'iniciar-ajuste': return demandaService.iniciarAjuste(idDemanda);
-    case 'validar-gestor': return demandaService.validarGestor(idDemanda, parecer, comentario, anexos);
-    case 'devolver': return demandaService.devolver(idDemanda, parecer, comentario, anexos);
-    case 'rejeitar': return demandaService.rejeitar(idDemanda, motivo, parecer, anexos);
-    case 'rejeitar-gestor': return demandaService.rejeitarGestor(idDemanda, motivo, parecer, anexos);
-    case 'enviar-sti': return demandaService.enviarParaSTI(idDemanda);
-    case 'aprovar-sti': return demandaService.aprovarSTI(idDemanda, parecer, comentario, anexos);
-    case 'reprovar-sti': return demandaService.reprovarSTI(idDemanda, motivo, parecer, anexos);
-    case 'solicitar-ajustes-sti': return demandaService.solicitarAjustesSTI(idDemanda, parecer, comentario, anexos);
-    case 'reenviar-sti': return demandaService.reenviarParaSTI(idDemanda);
-    case 'dpo-aprovar': return demandaService.dpoAprovar(idDemanda, parecer, comentario, anexos);
-    case 'dpo-solicitar-ajustes': return demandaService.dpoSolicitarAjustes(idDemanda, parecer, comentario, anexos);
-    case 'iniciar-desenvolvimento': return demandaService.iniciarDesenvolvimento(idDemanda);
-    case 'submeter-produto': return demandaService.submeterProduto(idDemanda, parecer, comentario, anexos);
-    case 'validar-homologacao-gestor': return demandaService.validarHomologacaoGestor(idDemanda, parecer, comentario, anexos);
-    case 'devolver-homologacao': return demandaService.devolverHomologacao(idDemanda, parecer, comentario, anexos);
-    case 'iniciar-ajuste-homologacao': return demandaService.iniciarAjusteHomologacao(idDemanda);
-    case 'enviar-homologacao-sti': return demandaService.enviarHomologacaoSTI(idDemanda);
-    case 'solicitar-ajustes-homologacao': return demandaService.solicitarAjustesHomologacao(idDemanda, parecer, comentario, anexos);
-    case 'homologar': return demandaService.homologar(idDemanda, parecer, comentario, tipo_deploy, id_unidade_producao, anexos);
-    case 'rejeitar-homologacao': return demandaService.rejeitarHomologacao(idDemanda, motivo, parecer, anexos);
-    case 'reenviar-homologacao-sti': return demandaService.reenviarHomologacaoSTI(idDemanda);
-    case 'iniciar-deploy': return demandaService.iniciarDeploy(idDemanda, parecer, anexos);
-    case 'confirmar-deploy': return demandaService.confirmarDeploy(idDemanda, parecer, anexos);
-    case 'desativar': return demandaService.desativar(idDemanda, motivo);
-    case 'encaminhar-avaliador': return demandaService.encaminharAvaliador(idDemanda, id_unidade_avaliador, comentario);
-    case 'encaminhar-avaliador-hom': return demandaService.encaminharAvaliador(idDemanda, id_unidade_avaliador, comentario);
-    case 'avaliador-solicitar-ajustes': return demandaService.avaliadorSolicitarAjustes(idDemanda, parecer, comentario, anexos);
-    case 'avaliador-devolver-analista': return demandaService.avaliadorDevolverAnalista(idDemanda, parecer, comentario, anexos);
-    case 'cancelar': return demandaService.cancelar(idDemanda, motivo);
-    default: throw new Error(`Ação desconhecida: ${acaoId}`);
-  }
+const ACAO_HANDLERS = {
+  'enviar-gestor': (id) => demandaService.enviarParaGestor(id),
+  'iniciar-ajuste': (id) => demandaService.iniciarAjuste(id),
+  'validar-gestor': (id, { parecer, comentario, anexos }) => demandaService.validarGestor(id, parecer, comentario, anexos),
+  'devolver': (id, { parecer, comentario, anexos }) => demandaService.devolver(id, parecer, comentario, anexos),
+  'rejeitar': (id, { motivo, parecer, anexos }) => demandaService.rejeitar(id, motivo, parecer, anexos),
+  'rejeitar-gestor': (id, { motivo, parecer, anexos }) => demandaService.rejeitarGestor(id, motivo, parecer, anexos),
+  'enviar-sti': (id) => demandaService.enviarParaSTI(id),
+  'aprovar-sti': (id, { parecer, comentario, anexos }) => demandaService.aprovarSTI(id, parecer, comentario, anexos),
+  'reprovar-sti': (id, { motivo, parecer, anexos }) => demandaService.reprovarSTI(id, motivo, parecer, anexos),
+  'solicitar-ajustes-sti': (id, { parecer, comentario, anexos }) => demandaService.solicitarAjustesSTI(id, parecer, comentario, anexos),
+  'reenviar-sti': (id) => demandaService.reenviarParaSTI(id),
+  'dpo-aprovar': (id, { parecer, comentario, anexos }) => demandaService.dpoAprovar(id, parecer, comentario, anexos),
+  'dpo-solicitar-ajustes': (id, { parecer, comentario, anexos }) => demandaService.dpoSolicitarAjustes(id, parecer, comentario, anexos),
+  'iniciar-desenvolvimento': (id) => demandaService.iniciarDesenvolvimento(id),
+  'submeter-produto': (id, { parecer, comentario, anexos }) => demandaService.submeterProduto(id, parecer, comentario, anexos),
+  'validar-homologacao-gestor': (id, { parecer, comentario, anexos }) => demandaService.validarHomologacaoGestor(id, parecer, comentario, anexos),
+  'devolver-homologacao': (id, { parecer, comentario, anexos }) => demandaService.devolverHomologacao(id, parecer, comentario, anexos),
+  'iniciar-ajuste-homologacao': (id) => demandaService.iniciarAjusteHomologacao(id),
+  'enviar-homologacao-sti': (id) => demandaService.enviarHomologacaoSTI(id),
+  'solicitar-ajustes-homologacao': (id, { parecer, comentario, anexos }) => demandaService.solicitarAjustesHomologacao(id, parecer, comentario, anexos),
+  'homologar': (id, { parecer, comentario, tipo_deploy, id_unidade_producao, anexos }) => demandaService.homologar(id, parecer, comentario, tipo_deploy, id_unidade_producao, anexos),
+  'rejeitar-homologacao': (id, { motivo, parecer, anexos }) => demandaService.rejeitarHomologacao(id, motivo, parecer, anexos),
+  'reenviar-homologacao-sti': (id) => demandaService.reenviarHomologacaoSTI(id),
+  'iniciar-deploy': (id, { parecer, anexos }) => demandaService.iniciarDeploy(id, parecer, anexos),
+  'confirmar-deploy': (id, { parecer, anexos }) => demandaService.confirmarDeploy(id, parecer, anexos),
+  'desativar': (id, { motivo }) => demandaService.desativar(id, motivo),
+  'encaminhar-avaliador': (id, { id_unidade_avaliador, comentario }) => demandaService.encaminharAvaliador(id, id_unidade_avaliador, comentario),
+  'encaminhar-avaliador-hom': (id, { id_unidade_avaliador, comentario }) => demandaService.encaminharAvaliador(id, id_unidade_avaliador, comentario),
+  'avaliador-solicitar-ajustes': (id, { parecer, comentario, anexos }) => demandaService.avaliadorSolicitarAjustes(id, parecer, comentario, anexos),
+  'avaliador-devolver-analista': (id, { parecer, comentario, anexos }) => demandaService.avaliadorDevolverAnalista(id, parecer, comentario, anexos),
+  'suspender': (id, { motivo }) => demandaService.suspender(id, motivo),
+  'retornar-suspensao': (id) => demandaService.retornarSuspensao(id),
+  'cancelar': (id, { motivo }) => demandaService.cancelar(id, motivo),
+};
+
+async function executarAcao(idDemanda, acaoId, params) {
+  const handler = ACAO_HANDLERS[acaoId];
+  if (!handler) throw new Error(`Ação desconhecida: ${acaoId}`);
+  return handler(idDemanda, params);
 }
 
 // ─── Timeline do processo ──────────────────────────────────────────────────
@@ -234,6 +258,7 @@ const STATUS_IDX = {
   EM_MONITORAMENTO: 11,
   DESATIVADA: 12,
   REJEITADA: -1, REPROVADA_STI: -2, CANCELADA: -3,
+  SUSPENSO: -4,
 };
 
 const PASSOS_TIMELINE = [
@@ -296,9 +321,12 @@ const PASSOS_TIMELINE = [
 
 function computarPassos(demanda, historico) {
   const status = demanda.status_atual;
-  const idx = STATUS_IDX[status] ?? -99;
+  const statusEfetivo = (status === 'SUSPENSO' && demanda.status_antes_suspensao)
+    ? demanda.status_antes_suspensao
+    : status;
+  const idx = STATUS_IDX[statusEfetivo] ?? -99;
   const isCancelada = status === 'CANCELADA';
-  const isTerminal = idx < 0;
+  const isTerminal = idx < 0 && status !== 'SUSPENSO';
 
   const dpoPorCampo = (campo) =>
     demanda.dados_sensiveis === true ||
@@ -337,14 +365,17 @@ function computarPassos(demanda, historico) {
       : null;
 
     // Contagem de retornos/ajustes neste passo
-    const retornos = passo.eventoRetornoFiltro
-      ? historico.filter(h =>
-          h.status_anterior === passo.eventoRetornoFiltro.status_anterior &&
-          h.tipo_acao === passo.eventoRetornoFiltro.tipo_acao
-        ).length
-      : passo.eventoRetorno
-      ? historico.filter(h => passo.eventoRetorno.includes(h.status_novo)).length
-      : 0;
+    let retornos;
+    if (passo.eventoRetornoFiltro) {
+      retornos = historico.filter(h =>
+        h.status_anterior === passo.eventoRetornoFiltro.status_anterior &&
+        h.tipo_acao === passo.eventoRetornoFiltro.tipo_acao
+      ).length;
+    } else if (passo.eventoRetorno) {
+      retornos = historico.filter(h => passo.eventoRetorno.includes(h.status_novo)).length;
+    } else {
+      retornos = 0;
+    }
 
     // Evento terminal (rejeição/reprovação) se ocorreu neste passo
     const eventoTerminal = passo.terminalStatus && status === passo.terminalStatus
@@ -398,6 +429,12 @@ function PassoTimeline({ passo, isLast }) {
 
   const lineStyle = passo.estado === 'done' ? 'bg-emerald-200' : 'bg-neutral-100';
 
+  const corLabelPasso = {
+    done: 'text-neutral-700',
+    active: 'text-tce-700',
+    error: 'text-red-600',
+  }[passo.estado] || 'text-neutral-400';
+
   const evento = passo.eventoCriacao || passo.eventoConcluso;
 
   return (
@@ -415,13 +452,9 @@ function PassoTimeline({ passo, isLast }) {
       </div>
 
       {/* Conteúdo */}
-      <div className={`pb-4 flex-1 min-w-0 ${isLast ? '' : ''}`}>
+      <div className="pb-4 flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-xs font-semibold ${passo.estado === 'done' ? 'text-neutral-700'
-              : passo.estado === 'active' ? 'text-tce-700'
-                : passo.estado === 'error' ? 'text-red-600'
-                  : 'text-neutral-400'
-            }`}>
+          <span className={`text-xs font-semibold ${corLabelPasso}`}>
             {passo.label}
           </span>
           {passo.retornos > 0 && (
@@ -488,8 +521,8 @@ function TimelineProcesso({ demanda, historico }) {
 
 // ─── Componentes ───────────────────────────────────────────────────────────
 
-function FaseIndicador({ status }) {
-  const fase = getFaseAtual(status);
+function FaseIndicador({ status, demanda = null }) {
+  const fase = getFaseAtual(status, demanda);
   const cancelado = status === 'CANCELADA';
   const terminal = ['REPROVADA_STI', 'REJEITADA', 'DESATIVADA'].includes(status);
 
@@ -506,20 +539,24 @@ function FaseIndicador({ status }) {
 
   return (
     <div className="flex items-center gap-1">
-      {FASES.map((f, i) => (
-        <div key={f.num} className="flex items-center gap-1">
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${f.num === fase ? 'bg-tce-700 text-white'
-              : f.num < fase ? 'bg-tce-100 text-tce-600'
-                : 'bg-neutral-100 text-neutral-400'
-            }`}>
-            {f.num < fase && <CheckCircle size={10} />}
-            {f.label}
+      {FASES.map((f, i) => {
+        let corFase;
+        if (f.num === fase) corFase = 'bg-tce-700 text-white';
+        else if (f.num < fase) corFase = 'bg-tce-100 text-tce-600';
+        else corFase = 'bg-neutral-100 text-neutral-400';
+
+        return (
+          <div key={f.num} className="flex items-center gap-1">
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${corFase}`}>
+              {f.num < fase && <CheckCircle size={10} />}
+              {f.label}
+            </div>
+            {i < FASES.length - 1 && (
+              <div className={`w-4 h-px ${f.num < fase ? 'bg-tce-300' : 'bg-neutral-200'}`} />
+            )}
           </div>
-          {i < FASES.length - 1 && (
-            <div className={`w-4 h-px ${f.num < fase ? 'bg-tce-300' : 'bg-neutral-200'}`} />
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -530,6 +567,7 @@ function BotaoAcao({ acao, onClick }) {
     success: 'bg-emerald-600 hover:bg-emerald-700 text-white',
     warning: 'bg-amber-500 hover:bg-amber-600 text-white',
     danger: 'border border-red-300 text-red-600 hover:bg-red-50',
+    neutral: 'border border-neutral-300 text-neutral-600 hover:bg-neutral-50',
   }[acao.variante] || 'bg-neutral-600 text-white';
 
   return (
@@ -620,7 +658,8 @@ function HistoricoItem({ item, anexosSolicitacao, onRemoverAnexo }) {
           {item.parecer && (
             <div
               className="mt-2 text-sm text-neutral-600 bg-neutral-50 rounded-lg px-3 py-2 border border-neutral-100 leading-relaxed rich-text-content rich-text-history"
-              dangerouslySetInnerHTML={{ __html: item.parecer }}
+              // eslint-disable-next-line react/no-danger -- conteúdo passa por DOMPurify.sanitize antes de renderizar
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.parecer) }}
               onClick={handleParecerClick}
             />
           )}
@@ -827,6 +866,35 @@ const LEGENDA_PADRAO = {
   'confirmar-deploy':           'Deploy confirmado. Solução em produção.',
 };
 
+function SeletorUnidade({ carregando, erro, valor, onChange, opcoes }) {
+  if (carregando) {
+    return (
+      <div className="flex items-center gap-2 py-2 text-sm text-neutral-400">
+        <Loader2 size={14} className="animate-spin" /> Carregando unidades...
+      </div>
+    );
+  }
+  if (erro) {
+    return (
+      <p className="text-sm text-red-500 flex items-center gap-1.5">
+        <AlertTriangle size={13} />{erro}
+      </p>
+    );
+  }
+  return (
+    <select
+      value={valor}
+      onChange={onChange}
+      className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-500"
+    >
+      <option value="">Selecione a unidade...</option>
+      {opcoes.map(u => (
+        <option key={u.id_unidade} value={u.id_unidade}>{u.sigla} — {u.nome_unidade}</option>
+      ))}
+    </select>
+  );
+}
+
 function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
   const defaultParecer = LEGENDA_PADRAO[acao.id] ?? '';
   const [parecer, setParecer] = useState(defaultParecer ? `<p>${defaultParecer}</p>` : '');
@@ -856,6 +924,7 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
         .catch(() => setErroUnidadesAv('Não foi possível carregar as unidades.'))
         .finally(() => setLoadingUnidadesAv(false));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- unidadesAvaliador.length intencionalmente fora (evita loop); revisar depois
   }, [acao.tipo]);
 
   const handleTipoDeploy = async (valor) => {
@@ -970,26 +1039,13 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
             <label className="block text-sm font-medium text-neutral-700 mb-1.5">
               Unidade de produção STI <span className="text-red-500">*</span>
             </label>
-            {loadingUnidades ? (
-              <div className="flex items-center gap-2 py-2 text-sm text-neutral-400">
-                <Loader2 size={14} className="animate-spin" /> Carregando unidades...
-              </div>
-            ) : erroUnidades ? (
-              <p className="text-sm text-red-500 flex items-center gap-1.5">
-                <AlertTriangle size={13} />{erroUnidades}
-              </p>
-            ) : (
-              <select
-                value={unidadeSelecionada}
-                onChange={e => setUnidadeSelecionada(e.target.value)}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-500"
-              >
-                <option value="">Selecione a unidade...</option>
-                {unidadesProducao.map(u => (
-                  <option key={u.id_unidade} value={u.id_unidade}>{u.sigla} — {u.nome_unidade}</option>
-                ))}
-              </select>
-            )}
+            <SeletorUnidade
+              carregando={loadingUnidades}
+              erro={erroUnidades}
+              valor={unidadeSelecionada}
+              onChange={e => setUnidadeSelecionada(e.target.value)}
+              opcoes={unidadesProducao}
+            />
           </div>
         )}
 
@@ -998,26 +1054,13 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
             <label className="block text-sm font-medium text-neutral-700 mb-1.5">
               Unidade do Avaliador Técnico <span className="text-red-500">*</span>
             </label>
-            {loadingUnidadesAv ? (
-              <div className="flex items-center gap-2 py-2 text-sm text-neutral-400">
-                <Loader2 size={14} className="animate-spin" /> Carregando unidades...
-              </div>
-            ) : erroUnidadesAv ? (
-              <p className="text-sm text-red-500 flex items-center gap-1.5">
-                <AlertTriangle size={13} />{erroUnidadesAv}
-              </p>
-            ) : (
-              <select
-                value={unidadeAvaliadorSelecionada}
-                onChange={e => setUnidadeAvaliadorSelecionada(e.target.value)}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-500"
-              >
-                <option value="">Selecione a unidade...</option>
-                {unidadesAvaliador.map(u => (
-                  <option key={u.id_unidade} value={u.id_unidade}>{u.sigla} — {u.nome_unidade}</option>
-                ))}
-              </select>
-            )}
+            <SeletorUnidade
+              carregando={loadingUnidadesAv}
+              erro={erroUnidadesAv}
+              valor={unidadeAvaliadorSelecionada}
+              onChange={e => setUnidadeAvaliadorSelecionada(e.target.value)}
+              opcoes={unidadesAvaliador}
+            />
             <p className="text-[11px] text-violet-600 mt-1.5">
               Todos os Avaliadores Técnicos da unidade selecionada poderão analisar a demanda.
             </p>
@@ -1048,19 +1091,11 @@ function ModalAcao({ acao, onConfirmar, onFechar, executando }) {
 
 // ─── Página ────────────────────────────────────────────────────────────────
 
-const fmtDt = (d) => d
-  ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-  : null;
-
 const PRIORIDADE_CLS = {
   CRITICA: 'bg-red-100 text-red-700',
   ALTA: 'bg-orange-100 text-orange-700',
   MEDIA: 'bg-yellow-100 text-yellow-700',
   BAIXA: 'bg-green-100 text-green-700',
-};
-
-const PRIORIDADE_LABEL = {
-  CRITICA: 'Crítica', ALTA: 'Alta', MEDIA: 'Média', BAIXA: 'Baixa',
 };
 
 const TIPO_SOLUCAO_LABEL = {
@@ -1082,6 +1117,15 @@ export default function DemandaDetailPage() {
   const [acaoAtiva, setAcaoAtiva] = useState(null);
   const [executando, setExecutando] = useState(false);
 
+  const [modalTransferencia, setModalTransferencia]   = useState(false);
+  const [unidadesDisponiveis, setUnidadesDisponiveis] = useState([]);
+  const [departamentos, setDepartamentos]             = useState([]);
+  const [transferDepartamento, setTransferDepartamento] = useState('');
+  const [transferUnidade, setTransferUnidade]         = useState('');
+  const [transferMotivo, setTransferMotivo]           = useState('');
+  const [transferErro, setTransferErro]               = useState('');
+  const [transferSalvando, setTransferSalvando]       = useState(false);
+
   const carregar = useCallback(async () => {
     setErroGeral('');
     setErroStatus(null);
@@ -1101,6 +1145,32 @@ export default function DemandaDetailPage() {
   }, [id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const abrirModalTransferencia = async () => {
+    if (!unidadesDisponiveis.length) {
+      const [resUnidades, resDepts] = await Promise.all([
+        adminService.listarUnidades(),
+        adminService.listarDepartamentos(),
+      ]);
+      setUnidadesDisponiveis(resUnidades.data?.unidades ?? resUnidades.data ?? []);
+      setDepartamentos(resDepts.data?.departamentos ?? resDepts.data ?? []);
+    }
+    setTransferDepartamento(''); setTransferUnidade(''); setTransferMotivo(''); setTransferErro('');
+    setModalTransferencia(true);
+  };
+
+  const confirmarTransferencia = async () => {
+    if (!transferUnidade) { setTransferErro('Selecione a nova unidade.'); return; }
+    if (transferMotivo.trim().length < 10) { setTransferErro('Motivo deve ter ao menos 10 caracteres.'); return; }
+    setTransferSalvando(true); setTransferErro('');
+    try {
+      await demandaService.transferirLocacao(demanda.id_demanda, Number(transferUnidade), transferMotivo.trim());
+      setModalTransferencia(false);
+      carregar();
+    } catch (err) {
+      setTransferErro(err.response?.data?.message ?? 'Erro ao transferir locação.');
+    } finally { setTransferSalvando(false); }
+  };
 
   const podeEditarAnexos =
     ['DRAFT', 'SOLICITANTE_AJUSTANDO'].includes(demanda?.status_atual) &&
@@ -1190,7 +1260,7 @@ export default function DemandaDetailPage() {
             </div>
             <h1 className="text-xl font-bold text-neutral-800 leading-tight">{demanda.titulo}</h1>
             <div className="mt-2">
-              <FaseIndicador status={demanda.status_atual} />
+              <FaseIndicador status={demanda.status_atual} demanda={demanda} />
             </div>
           </div>
           {['DRAFT', 'SOLICITANTE_AJUSTANDO'].includes(demanda.status_atual) &&
@@ -1226,13 +1296,22 @@ export default function DemandaDetailPage() {
         )}
 
         {/* Ações */}
-        {acoes.length > 0 && (
+        {(acoes.length > 0 || (['GESTOR_SISTEMA', 'ANALISTA_STI'].includes(usuario?.perfil_principal) && demanda?.status_atual === 'EM_MONITORAMENTO')) && (
           <div className="mb-6 bg-white rounded-xl border border-neutral-200 px-5 py-4">
             <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-3">
               Ações disponíveis para você
             </p>
             <div className="flex flex-wrap gap-2">
               {acoes.map(a => <BotaoAcao key={a.id} acao={a} onClick={setAcaoAtiva} />)}
+              {['GESTOR_SISTEMA', 'ANALISTA_STI'].includes(usuario?.perfil_principal) && demanda?.status_atual === 'EM_MONITORAMENTO' && (
+                <button
+                  onClick={abrirModalTransferencia}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-tce-200 text-tce-700 bg-white hover:bg-tce-50 transition-colors"
+                >
+                  <ArrowLeftRight size={15} />
+                  Transferir Locação
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1424,6 +1503,93 @@ export default function DemandaDetailPage() {
           onFechar={() => { setAcaoAtiva(null); setErroGeral(''); }}
           executando={executando}
         />
+      )}
+
+      {modalTransferencia && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
+            <h2 className="text-base font-semibold text-neutral-800 flex items-center gap-2">
+              <ArrowLeftRight size={18} className="text-tce-700" />
+              Transferir Locação no Inventário
+            </h2>
+
+            <p className="text-sm text-neutral-500">
+              Locação atual:{' '}
+              <span className="font-medium text-neutral-700">{demanda?.nome_departamento} / {demanda?.nome_unidade}</span>
+            </p>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-600">Departamento de destino</label>
+              <select
+                value={transferDepartamento}
+                onChange={e => { setTransferDepartamento(e.target.value); setTransferUnidade(''); }}
+                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-300"
+              >
+                <option value="">Todos os departamentos</option>
+                {departamentos.map(d => (
+                  <option key={d.id_departamento} value={d.id_departamento}>{d.nome_departamento}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-600">Nova unidade responsável</label>
+              <select
+                value={transferUnidade}
+                onChange={e => setTransferUnidade(e.target.value)}
+                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-300"
+              >
+                <option value="">Selecione...</option>
+                {unidadesDisponiveis
+                  .filter(u =>
+                    String(u.id_unidade) !== String(demanda?.id_unidade) &&
+                    (!transferDepartamento || String(u.id_departamento) === String(transferDepartamento))
+                  )
+                  .map(u => (
+                    <option key={u.id_unidade} value={u.id_unidade}>{u.nome_unidade}</option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-600">Motivo</label>
+              <textarea
+                value={transferMotivo}
+                onChange={e => setTransferMotivo(e.target.value)}
+                rows={3}
+                placeholder="Descreva o motivo (mín. 10 caracteres)..."
+                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-tce-300"
+              />
+              <span className={`text-xs ${transferMotivo.trim().length < 10 ? 'text-neutral-400' : 'text-green-600'}`}>
+                {transferMotivo.trim().length}/10 mínimo
+              </span>
+            </div>
+
+            {transferErro && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {transferErro}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setModalTransferencia(false)}
+                disabled={transferSalvando}
+                className="px-4 py-2 text-sm rounded-lg border border-neutral-200 text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarTransferencia}
+                disabled={transferSalvando}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-tce-700 text-white hover:bg-tce-800 disabled:opacity-50 flex items-center gap-2"
+              >
+                {transferSalvando && <Loader2 size={14} className="animate-spin" />}
+                Confirmar Transferência
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );

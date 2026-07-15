@@ -89,6 +89,8 @@
 ### 1.5 AVALIADOR_TECNICO
 **Descrição:** Nível de revisão superior dentro da STI; atua quando o Analista STI encaminha uma demanda para revisão
 
+> **Vínculo departamental obrigatório (RN-USR-001):** O perfil `AVALIADOR_TECNICO` como perfil **principal** só pode ser atribuído a usuários do departamento **Secretaria de Tecnologia da Informação**. Tentativas de criação ou edição fora desse departamento são bloqueadas no frontend e retornam HTTP 400 no backend.
+
 **Responsabilidades:**
 - Visualizar demandas encaminhadas pelo Analista (AGUARDANDO_AVALIADOR / AGUARDANDO_AVALIADOR_HOMOLOGACAO)
 - Devolver ao Analista para reanálise (→ FILA_STI / FILA_HOMOLOGACAO_STI)
@@ -247,6 +249,7 @@ Usuários do **departamento STI** podem acumular um segundo (ou terceiro) perfil
 
 **Regras gerais:**
 - Multiperfil é restrito a usuários vinculados ao departamento STI
+- O perfil principal `AVALIADOR_TECNICO` também é restrito à STI (ver RN-USR-001 em REGRAS_NEGOCIO.md)
 - O sistema ativa o contexto do perfil adequado a cada ação realizada (ex.: ao validar como gestor, age como `GESTOR_UNIDADE`)
 - Perfis secundários são armazenados em `tb_usuarios.perfis_secundarios` (JSONB)
 

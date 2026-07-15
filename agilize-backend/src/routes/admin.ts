@@ -27,6 +27,7 @@ async function _idDeptSti(): Promise<number | null> {
 
 function _validarPerfisSecundarios(perfilPrincipal: Perfil, perfisSecundarios: Perfil[]): void {
   if (!perfisSecundarios.length) return;
+  // eslint-disable-next-line security/detect-object-injection
   const permitidos = PERFIS_SEC_VALIDOS[perfilPrincipal] ?? [];
   if (!permitidos.length) {
     const err: HttpError = new Error(`O perfil ${perfilPrincipal} não pode ter perfis secundários.`);
@@ -137,6 +138,7 @@ router.get('/usuarios', soAdmin, async (req: Request, res: Response, next: NextF
   } catch (error) { next(error); }
 });
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 router.post('/usuarios', soAdmin, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { nome, email, senha, perfil_principal, perfis_secundarios, id_unidade, id_departamento } = req.body;
@@ -144,9 +146,23 @@ router.post('/usuarios', soAdmin, async (req: Request, res: Response, next: Next
     if (!nome || !email || !senha || !perfil_principal) {
       const err: HttpError = new Error('Nome, email, senha e perfil são obrigatórios'); err.statusCode = 400; throw err;
     }
+    const precisaUnidade = perfil_principal !== 'GESTOR_DEPARTAMENTO';
+    if (!id_departamento || (precisaUnidade && !id_unidade)) {
+      const err: HttpError = new Error(
+        precisaUnidade
+          ? 'Departamento e unidade são obrigatórios para todos os usuários'
+          : 'Departamento é obrigatório para Gestor de Departamento'
+      ); err.statusCode = 400; throw err;
+    }
     validarForcaSenha(senha);
     if (!PERFIS.includes(perfil_principal)) {
       const err: HttpError = new Error('Perfil inválido'); err.statusCode = 400; throw err;
+    }
+    if (perfil_principal === 'AVALIADOR_TECNICO') {
+      const idDeptSti = await _idDeptSti();
+      if (!idDeptSti || Number(id_departamento) !== Number(idDeptSti)) {
+        const err: HttpError = new Error('O perfil Avaliador Técnico é exclusivo para usuários da Secretaria de Tecnologia da Informação'); err.statusCode = 400; throw err;
+      }
     }
     if (await db('tb_usuarios').where('email', email).first()) {
       const err: HttpError = new Error('Email já cadastrado'); err.statusCode = 409; throw err;
@@ -178,6 +194,7 @@ router.post('/usuarios', soAdmin, async (req: Request, res: Response, next: Next
   } catch (error) { next(error); }
 });
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 router.put('/usuarios/:id', soAdmin, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { nome, email, perfil_principal, perfis_secundarios, id_unidade, id_departamento, senha } = req.body;
@@ -196,6 +213,21 @@ router.put('/usuarios/:id', soAdmin, async (req: Request, res: Response, next: N
 
     const perfilFinal = (perfil_principal || atual.perfil_principal) as Perfil;
     const deptFinal = id_departamento !== undefined ? (id_departamento || null) : atual.id_departamento;
+    const unidadeFinalChk = id_unidade !== undefined ? (id_unidade || null) : atual.id_unidade;
+    const precisaUnidadeEdit = perfilFinal !== 'GESTOR_DEPARTAMENTO';
+    if (!deptFinal || (precisaUnidadeEdit && !unidadeFinalChk)) {
+      const err: HttpError = new Error(
+        precisaUnidadeEdit
+          ? 'Departamento e unidade são obrigatórios para todos os usuários'
+          : 'Departamento é obrigatório para Gestor de Departamento'
+      ); err.statusCode = 400; throw err;
+    }
+    if (perfilFinal === 'AVALIADOR_TECNICO') {
+      const idDeptStiChk = await _idDeptSti();
+      if (!idDeptStiChk || Number(deptFinal) !== Number(idDeptStiChk)) {
+        const err: HttpError = new Error('O perfil Avaliador Técnico é exclusivo para usuários da Secretaria de Tecnologia da Informação'); err.statusCode = 400; throw err;
+      }
+    }
     let perfisSecFinal: Perfil[] | null = null;
 
     if (perfis_secundarios !== undefined) {
@@ -341,9 +373,10 @@ router.post('/atribuicoes', soAdmin, async (req: Request, res: Response, next: N
       .where('id_usuario', id_gestor)
       .where('ativo', true)
       .first();
-    const perfisSecGestor: Perfil[] = Array.isArray(gestor?.perfis_secundarios)
-      ? gestor.perfis_secundarios
-      : (typeof gestor?.perfis_secundarios === 'string' ? JSON.parse(gestor.perfis_secundarios) : []);
+    let perfisSecGestor: Perfil[];
+    if (Array.isArray(gestor?.perfis_secundarios)) perfisSecGestor = gestor.perfis_secundarios;
+    else if (typeof gestor?.perfis_secundarios === 'string') perfisSecGestor = JSON.parse(gestor.perfis_secundarios);
+    else perfisSecGestor = [];
     const ehGestor = gestor?.perfil_principal === 'GESTOR_UNIDADE' || perfisSecGestor.includes('GESTOR_UNIDADE');
     if (!gestor || !ehGestor) {
       const err: HttpError = new Error('Usuário não encontrado ou não possui perfil GESTOR_UNIDADE'); err.statusCode = 400; throw err;

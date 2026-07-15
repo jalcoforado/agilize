@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   FilePlus2, Bell, BarChart2, Package,
   Users, LogOut, GitBranch, ClipboardCheck, PanelLeftClose, PanelLeftOpen,
-  ArrowDownNarrowWide, Network,
+  ArrowDownNarrowWide,
 } from 'lucide-react';
 
 // ─── Menus por perfil ────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ export default function Sidebar({ notificacoesNaoLidas = 0 }) {
 
   const toggle = () => setColapsado(prev => {
     const next = !prev;
-    try { localStorage.setItem('sidebar_colapsado', String(next)); } catch { }
+    try { localStorage.setItem('sidebar_colapsado', String(next)); } catch { /* localStorage indisponível (modo privado) */ }
     return next;
   });
 
@@ -163,7 +163,7 @@ export default function Sidebar({ notificacoesNaoLidas = 0 }) {
 
   const unidade = perfil === 'GESTOR_DEPARTAMENTO'
     ? (usuario.nome_departamento || null)
-    : ([usuario.nome_departamento, usuario.nome_unidade].filter(Boolean).join(' / ') || null);
+    : ([usuario.sigla_unidade, usuario.nome_unidade].filter(Boolean).join(' / ') || null);
 
   // ── Modo colapsado ─────────────────────────────────────────────────────────
   if (colapsado) {
@@ -262,7 +262,21 @@ export default function Sidebar({ notificacoesNaoLidas = 0 }) {
           <p className="text-base font-semibold text-white truncate leading-tight">{usuario.nome}</p>
           <p className="text-tce-300 text-xs truncate mt-0.5">{LABEL_PERFIL[perfil] || perfil}</p>
           {unidade && (
-            <p className="text-tce-400 text-[11px] truncate mt-0.5 leading-tight">{unidade}</p>
+            <div className="relative group/loc mt-0.5">
+              <p className="text-tce-400 text-[11px] truncate leading-tight cursor-default">{unidade}</p>
+              <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50
+                              opacity-0 group-hover/loc:opacity-100 transition-opacity duration-100 delay-75">
+                <div className="bg-neutral-900/95 text-white text-xs px-3 py-2 rounded-md
+                                shadow-xl ring-1 ring-white/10 whitespace-nowrap">
+                  {usuario.nome_departamento && (
+                    <p className="font-semibold">{usuario.nome_departamento}</p>
+                  )}
+                  {usuario.nome_unidade && perfil !== 'GESTOR_DEPARTAMENTO' && (
+                    <p className="text-neutral-300 mt-0.5">{usuario.nome_unidade}</p>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -7,7 +7,9 @@ process.env.NODE_ENV = 'test';
 
 // app e db são carregados via require APÓS configurar o ambiente, garantindo que
 // NODE_ENV='test' esteja definido antes de o app inicializar (imports são içados).
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const app = require('../index').default;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const db = require('../db/connection').default as Knex;
 
 const USUARIOS_TESTE = {
@@ -19,6 +21,7 @@ const USUARIOS_TESTE = {
 };
 
 async function login(perfil: keyof typeof USUARIOS_TESTE): Promise<string> {
+  // eslint-disable-next-line security/detect-object-injection
   const creds = USUARIOS_TESTE[perfil];
   const res = await request(app).post('/api/v1/auth/login').send(creds);
   if (!res.body.token) throw new Error(`Login falhou para ${perfil}: ${JSON.stringify(res.body)}`);

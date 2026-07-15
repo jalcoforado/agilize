@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Package, BarChart3, Terminal, Bot, Monitor,
   Search, ChevronRight, RefreshCw, Users,
-  CalendarCheck, Server, Zap, Filter, X
+  CalendarCheck, Server, Zap, Filter, X,
+  ArrowLeftRight, Loader2,
 } from 'lucide-react';
-import { demandaService } from '../services/api';
+import { demandaService, adminService } from '../services/api';
 import Layout from '../components/Layout';
 import StatusBadge from '../components/StatusBadge';
 import Pagination from '../components/Pagination';
@@ -100,7 +102,18 @@ function TileTipo({ tipo, count, selecionado, onClick }) {
 
 // ─── Linha da tabela ──────────────────────────────────────────────────────────
 
-function LinhaInventario({ demanda, navigate }) {
+const PERFIS_TRANSFERENCIA = ['GESTOR_SISTEMA', 'ANALISTA_STI'];
+
+function LinhaInventario({ demanda, navigate, podeTransferir, onTransferir }) {
+  const locRef = useRef(null);
+  const [tooltipPos, setTooltipPos] = useState(null);
+
+  const onLocEnter = () => {
+    if (!locRef.current) return;
+    const r = locRef.current.getBoundingClientRect();
+    setTooltipPos({ top: r.top + r.height / 2, left: r.right + 8 });
+  };
+
   return (
     <tr
       onClick={() => navigate(`/demanda/${demanda.id_demanda}`)}
@@ -117,10 +130,36 @@ function LinhaInventario({ demanda, navigate }) {
         <TipoBadge tipo={demanda.tipo_solucao} />
       </td>
 
-      {/* Unidade */}
-      <td className="px-3 py-3 hidden md:table-cell">
-        <p className="text-sm text-neutral-700 truncate max-w-[140px]">{demanda.nome_unidade || '—'}</p>
-        <p className="text-[11px] text-neutral-400 truncate">{demanda.nome_departamento || ''}</p>
+      {/* Locação */}
+      <td
+        ref={locRef}
+        className="px-3 py-3 hidden md:table-cell cursor-default"
+        onMouseEnter={onLocEnter}
+        onMouseLeave={() => setTooltipPos(null)}
+      >
+        {demanda.sigla_unidade ? (
+          <p className="text-sm font-mono font-medium text-neutral-700">
+            <span className="text-neutral-500">{demanda.sigla_unidade.split('-')[0]}</span>
+            <span className="text-neutral-300 mx-0.5">/</span>
+            <span>{demanda.sigla_unidade.split('-').slice(1).join('-')}</span>
+          </p>
+        ) : (
+          <p className="text-sm text-neutral-500">{demanda.nome_unidade || '—'}</p>
+        )}
+        {tooltipPos && (demanda.nome_unidade || demanda.nome_departamento) && createPortal(
+          <div
+            className="pointer-events-none fixed z-[9999]"
+            style={{ top: tooltipPos.top, left: tooltipPos.left, transform: 'translateY(-50%)' }}
+          >
+            <div className="bg-neutral-900/95 text-white text-xs px-3 py-2 rounded-md shadow-xl ring-1 ring-white/10 whitespace-nowrap flex flex-col gap-0.5">
+              <span className="font-semibold">{demanda.nome_unidade}</span>
+              {demanda.nome_departamento && (
+                <span className="text-neutral-300">{demanda.nome_departamento}</span>
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
       </td>
 
       {/* Desenvolvido por */}
@@ -165,18 +204,33 @@ function LinhaInventario({ demanda, navigate }) {
         <StatusBadge status={demanda.status_atual} />
       </td>
 
-      {/* Seta */}
-      <td className="px-3 py-3 text-right">
-        <ChevronRight size={14} className="text-neutral-300 group-hover:text-tce-500 transition ml-auto" />
+      {/* Ações / Seta */}
+      <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
+        {podeTransferir && demanda.status_atual === 'EM_MONITORAMENTO' ? (
+          <button
+            onClick={() => onTransferir(demanda)}
+            title="Transferir locação"
+            className="opacity-0 group-hover:opacity-100 transition inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-tce-200 text-tce-700 bg-white hover:bg-tce-50"
+          >
+            <ArrowLeftRight size={11} />
+            Transferir
+          </button>
+        ) : (
+          <ChevronRight size={14} className="text-neutral-300 group-hover:text-tce-500 transition ml-auto" />
+        )}
       </td>
     </tr>
   );
 }
 
+const STATUSES_PROD = ['EM_PRODUCAO', 'EM_MONITORAMENTO'];
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function InventarioPage() {
   const navigate = useNavigate();
+  const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+  const podeTransferir = PERFIS_TRANSFERENCIA.includes(usuario?.perfil_principal);
 
   const [demandas, setDemandas] = useState([]);
   const [todas, setTodas]       = useState([]);   // sem filtro de tipo/status — só para os tiles
@@ -189,7 +243,15 @@ export default function InventarioPage() {
   const [filtroTipo, setFiltroTipo]   = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
 
-  const STATUSES_PROD = ['EM_PRODUCAO', 'EM_MONITORAMENTO'];
+  const [demandaSelecionada, setDemandaSelecionada]   = useState(null);
+  const [unidadesDisponiveis, setUnidadesDisponiveis] = useState([]);
+  const [departamentos, setDepartamentos]             = useState([]);
+  const [transferDepartamento, setTransferDepartamento] = useState('');
+  const [transferUnidade, setTransferUnidade]         = useState('');
+  const [transferMotivo, setTransferMotivo]           = useState('');
+  const [transferErro, setTransferErro]               = useState('');
+  const [transferSalvando, setTransferSalvando]       = useState(false);
+
 
   // Carrega demandas com filtros
   const carregar = useCallback(async () => {
@@ -223,6 +285,32 @@ export default function InventarioPage() {
   useEffect(() => { setPagina(1); }, [filtroTipo, filtroStatus, busca]);
   useEffect(() => { carregar(); }, [carregar]);
 
+  const abrirModalTransferencia = async (demanda) => {
+    if (!unidadesDisponiveis.length) {
+      const [resUnidades, resDepts] = await Promise.all([
+        adminService.listarUnidades(),
+        adminService.listarDepartamentos(),
+      ]);
+      setUnidadesDisponiveis(resUnidades.data?.unidades ?? resUnidades.data ?? []);
+      setDepartamentos(resDepts.data?.departamentos ?? resDepts.data ?? []);
+    }
+    setDemandaSelecionada(demanda);
+    setTransferDepartamento(''); setTransferUnidade(''); setTransferMotivo(''); setTransferErro('');
+  };
+
+  const confirmarTransferencia = async () => {
+    if (!transferUnidade) { setTransferErro('Selecione a nova unidade.'); return; }
+    if (transferMotivo.trim().length < 10) { setTransferErro('Motivo deve ter ao menos 10 caracteres.'); return; }
+    setTransferSalvando(true); setTransferErro('');
+    try {
+      await demandaService.transferirLocacao(demandaSelecionada.id_demanda, Number(transferUnidade), transferMotivo.trim());
+      setDemandaSelecionada(null);
+      carregar();
+    } catch (err) {
+      setTransferErro(err.response?.data?.message ?? 'Erro ao transferir locação.');
+    } finally { setTransferSalvando(false); }
+  };
+
   // Filtro de busca é local (sobre a página atual)
   const listaFiltrada = busca.trim()
     ? demandas.filter(d =>
@@ -239,6 +327,73 @@ export default function InventarioPage() {
   }, {});
 
   const temFiltros = filtroTipo || filtroStatus || busca;
+
+  let conteudoInventario;
+  if (carregando) {
+    conteudoInventario = (
+      <div className="flex items-center justify-center py-16 gap-2 text-sm text-neutral-400">
+        <RefreshCw size={16} className="animate-spin" />
+        Carregando inventário...
+      </div>
+    );
+  } else if (listaFiltrada.length === 0) {
+    conteudoInventario = (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Package size={36} className="text-neutral-200 mb-3" />
+        <p className="text-neutral-500 font-medium">Nenhuma solução encontrada</p>
+        <p className="text-neutral-400 text-sm mt-1">
+          {temFiltros ? 'Tente ajustar os filtros.' : 'Ainda não há soluções em produção.'}
+        </p>
+      </div>
+    );
+  } else {
+    conteudoInventario = (
+      <>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-neutral-200 bg-neutral-50">
+                <th className="px-4 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide">Solução</th>
+                <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide">Tipo</th>
+                <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden md:table-cell">Locação</th>
+                <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden lg:table-cell">Desenvolvido por</th>
+                <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden lg:table-cell text-center">
+                  <span className="flex items-center justify-center gap-1"><Users size={11} /> Usuários</span>
+                </th>
+                <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden xl:table-cell text-center">Frequência</th>
+                <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden sm:table-cell">
+                  <span className="flex items-center gap-1"><CalendarCheck size={11} /> Em prod. desde</span>
+                </th>
+                <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden md:table-cell">Deploy</th>
+                <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide">Status</th>
+                <th className="px-3 py-3 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaFiltrada.map(d => (
+                <LinhaInventario
+                  key={d.id_demanda}
+                  demanda={d}
+                  navigate={navigate}
+                  podeTransferir={podeTransferir}
+                  onTransferir={abrirModalTransferencia}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Rodapé: total + paginação */}
+        <Pagination
+          pagina={pagina}
+          totalPaginas={totalPaginas}
+          total={total}
+          contagem={listaFiltrada.length}
+          onChange={setPagina}
+        />
+      </>
+    );
+  }
 
   return (
     <Layout>
@@ -329,59 +484,7 @@ export default function InventarioPage() {
 
         {/* Tabela */}
         <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden">
-          {carregando ? (
-            <div className="flex items-center justify-center py-16 gap-2 text-sm text-neutral-400">
-              <RefreshCw size={16} className="animate-spin" />
-              Carregando inventário...
-            </div>
-          ) : listaFiltrada.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Package size={36} className="text-neutral-200 mb-3" />
-              <p className="text-neutral-500 font-medium">Nenhuma solução encontrada</p>
-              <p className="text-neutral-400 text-sm mt-1">
-                {temFiltros ? 'Tente ajustar os filtros.' : 'Ainda não há soluções em produção.'}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-neutral-200 bg-neutral-50">
-                      <th className="px-4 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide">Solução</th>
-                      <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide">Tipo</th>
-                      <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden md:table-cell">Unidade</th>
-                      <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden lg:table-cell">Desenvolvido por</th>
-                      <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden lg:table-cell text-center">
-                        <span className="flex items-center justify-center gap-1"><Users size={11} /> Usuários</span>
-                      </th>
-                      <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden xl:table-cell text-center">Frequência</th>
-                      <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden sm:table-cell">
-                        <span className="flex items-center gap-1"><CalendarCheck size={11} /> Em prod. desde</span>
-                      </th>
-                      <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide hidden md:table-cell">Deploy</th>
-                      <th className="px-3 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wide">Status</th>
-                      <th className="px-3 py-3 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {listaFiltrada.map(d => (
-                      <LinhaInventario key={d.id_demanda} demanda={d} navigate={navigate} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Rodapé: total + paginação */}
-              <Pagination
-                pagina={pagina}
-                totalPaginas={totalPaginas}
-                total={total}
-                contagem={listaFiltrada.length}
-                onChange={setPagina}
-              />
-            </>
-          )}
+          {conteudoInventario}
         </div>
 
         {/* Legenda dos tiles */}
@@ -391,6 +494,95 @@ export default function InventarioPage() {
         </div>
 
       </div>
+
+      {demandaSelecionada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
+            <h2 className="text-base font-semibold text-neutral-800 flex items-center gap-2">
+              <ArrowLeftRight size={18} className="text-tce-700" />
+              Transferir Locação no Inventário
+            </h2>
+
+            <p className="text-sm text-neutral-500">
+              <span className="font-medium text-neutral-700">{demandaSelecionada.titulo}</span>
+              <br />
+              Locação atual:{' '}
+              <span className="font-medium text-neutral-700">{demandaSelecionada.nome_departamento} / {demandaSelecionada.nome_unidade}</span>
+            </p>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-600">Departamento de destino</label>
+              <select
+                value={transferDepartamento}
+                onChange={e => { setTransferDepartamento(e.target.value); setTransferUnidade(''); }}
+                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-300"
+              >
+                <option value="">Todos os departamentos</option>
+                {departamentos.map(d => (
+                  <option key={d.id_departamento} value={d.id_departamento}>{d.nome_departamento}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-600">Nova unidade responsável</label>
+              <select
+                value={transferUnidade}
+                onChange={e => setTransferUnidade(e.target.value)}
+                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-tce-300"
+              >
+                <option value="">Selecione...</option>
+                {unidadesDisponiveis
+                  .filter(u =>
+                    String(u.id_unidade) !== String(demandaSelecionada.id_unidade) &&
+                    (!transferDepartamento || String(u.id_departamento) === String(transferDepartamento))
+                  )
+                  .map(u => (
+                    <option key={u.id_unidade} value={u.id_unidade}>{u.nome_unidade}</option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-600">Motivo</label>
+              <textarea
+                value={transferMotivo}
+                onChange={e => setTransferMotivo(e.target.value)}
+                rows={3}
+                placeholder="Descreva o motivo (mín. 10 caracteres)..."
+                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-tce-300"
+              />
+              <span className={`text-xs ${transferMotivo.trim().length < 10 ? 'text-neutral-400' : 'text-green-600'}`}>
+                {transferMotivo.trim().length}/10 mínimo
+              </span>
+            </div>
+
+            {transferErro && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {transferErro}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setDemandaSelecionada(null)}
+                disabled={transferSalvando}
+                className="px-4 py-2 text-sm rounded-lg border border-neutral-200 text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarTransferencia}
+                disabled={transferSalvando}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-tce-700 text-white hover:bg-tce-800 disabled:opacity-50 flex items-center gap-2"
+              >
+                {transferSalvando && <Loader2 size={14} className="animate-spin" />}
+                Confirmar Transferência
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

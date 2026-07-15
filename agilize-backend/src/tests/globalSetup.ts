@@ -4,6 +4,7 @@ import knex from 'knex';
 dotenv.config({ path: '.env.test', override: true });
 process.env.NODE_ENV = 'test';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const knexConfig = require('../../knexfile');
 
 export = async (): Promise<void> => {

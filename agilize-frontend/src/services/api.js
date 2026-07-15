@@ -187,12 +187,22 @@ export const demandaService = {
     apiClient.post(`/demandas/${id}/dpo-solicitar-ajustes`, { parecer, comentario, anexos: await filesToBase64(files) }),
 
   // ─── Transversal ────────────────────────────────────────────────────────────
+  suspender: (id, motivo) =>
+    apiClient.post(`/demandas/${id}/suspender`, { motivo }),
+
+  retornarSuspensao: (id) =>
+    apiClient.post(`/demandas/${id}/retornar-suspensao`),
+
   cancelar: (id, motivo) =>
     apiClient.post(`/demandas/${id}/cancelar`, { motivo }),
   obterHistorico: (id, pagina = 1) =>
     apiClient.get(`/demandas/${id}/historico`, { params: { pagina } }),
   obterDiagnostico: (id) =>
     apiClient.get(`/demandas/${id}/diagnostico`),
+  atualizarPrioridade: (id, prioridade) =>
+    apiClient.patch(`/demandas/${id}/prioridade`, { prioridade }),
+  transferirLocacao: (id, id_unidade, motivo) =>
+    apiClient.patch(`/demandas/${id}/transferir-locacao`, { id_unidade, motivo }),
 };
 
 export const notificacaoService = {

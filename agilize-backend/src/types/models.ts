@@ -126,6 +126,7 @@ export interface Demanda {
 
   motivo_cancelamento: string | null;
   id_usuario_cancelamento: Id | null;
+  status_antes_suspensao: string | null;
 
   tipo_deploy: TipoDeploy | null;
 

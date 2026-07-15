@@ -32,6 +32,7 @@ const STATUS_CONFIG = {
   EM_MONITORAMENTO:              { label: 'Em Monitoramento',          cls: 'bg-emerald-600 text-white' },
   DESATIVADA:                    { label: 'Desativada',                cls: 'bg-neutral-300 text-neutral-600 line-through' },
   // Transversal
+  SUSPENSO:                      { label: 'Suspensa',                  cls: 'bg-yellow-100 text-yellow-800' },
   CANCELADA:                     { label: 'Cancelada',                 cls: 'bg-neutral-200 text-neutral-600 line-through' },
 };
 

@@ -20,20 +20,6 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    container_name: agilize_redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - agilize_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      timeout: 3s
-      retries: 5
-
   backend:
     build:
       context: .
@@ -46,14 +32,11 @@ services:
     environment:
       # Sobrescreve apenas o que é diferente dentro do Docker
       - DB_HOST=postgres
-      - REDIS_HOST=redis
       - NODE_ENV=development
     ports:
       - "3000:3000"
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     volumes:
       - .:/app
@@ -64,7 +47,6 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
 
 networks:
   agilize_network:

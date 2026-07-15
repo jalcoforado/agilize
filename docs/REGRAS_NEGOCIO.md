@@ -541,7 +541,59 @@ Teste:
 
 ---
 
-## 10. CHECKLIST DE CONFORMIDADE
+## 10. REGRAS DE GESTÃO DE USUÁRIOS
+
+### RN-USR-001: Departamento e Unidade Obrigatórios
+```
+Todo usuário do sistema deve estar vinculado a um departamento E a uma unidade.
+Exceção: o perfil GESTOR_DEPARTAMENTO requer apenas departamento — unidade é opcional.
+Não é permitido criar ou editar qualquer outro usuário deixando departamento ou unidade em branco.
+
+Validação em dupla camada:
+✓ Frontend (AdminPage): bloqueia o submit com mensagem de erro imediata se qualquer
+  um dos campos estiver vazio
+✓ Backend: POST /admin/usuarios e PUT /admin/usuarios/:id retornam HTTP 400 caso
+  id_departamento ou id_unidade resultem nulos após o processamento
+
+Mensagem de erro:
+"Departamento e unidade são obrigatórios para todos os usuários"
+
+Testes:
+- TC-USR-001a: Criar usuário sem departamento → HTTP 400
+- TC-USR-001b: Criar usuário sem unidade → HTTP 400
+- TC-USR-001c: Editar usuário e limpar unidade → HTTP 400
+- TC-USR-001d: Criar usuário com dept + unidade → HTTP 201
+```
+
+### RN-USR-002: Perfil AVALIADOR_TECNICO Exclusivo da STI
+```
+O perfil principal AVALIADOR_TECNICO só pode ser atribuído a usuários vinculados ao
+departamento Secretaria de Tecnologia da Informação.
+
+Fundamento: O Avaliador Técnico exerce revisão hierárquica interna à STI — atribui-lo
+a outras secretarias violaria a segregação de funções da N-PSI-016.
+
+Validação em dupla camada:
+✓ Frontend (AdminPage): bloqueia o envio do formulário antes da chamada à API, exibindo
+  mensagem imediata ao tentar salvar um AVALIADOR_TECNICO fora do departamento STI
+✓ Backend: POST /admin/usuarios e PUT /admin/usuarios/:id retornam HTTP 400 quando
+  id_departamento não corresponde ao departamento STI
+
+Mensagem de erro (backend e frontend):
+"O perfil Avaliador Técnico é exclusivo para usuários da Secretaria de Tecnologia da Informação"
+
+Escopo: aplica-se ao perfil_principal. O perfil secundário AVALIADOR_TECNICO já estava
+restrito à STI pela regra de perfis secundários (somente usuários STI acumulam perfis).
+
+Testes:
+- TC-USR-002a: Criar usuário AVALIADOR_TECNICO em depto não-STI → HTTP 400
+- TC-USR-002b: Editar usuário e trocar dept para não-STI mantendo AVALIADOR_TECNICO → HTTP 400
+- TC-USR-002c: Criar usuário AVALIADOR_TECNICO em depto STI → HTTP 201
+```
+
+---
+
+## 11. CHECKLIST DE CONFORMIDADE
 
 ```
 Antes de Deploy, validar:
@@ -558,6 +610,8 @@ Antes de Deploy, validar:
 ☐ RN-CONF-001-003: Conformidade N-PSI-016 atendida
 ☐ RN-TEMP-001-003: SLAs calculados corretamente
 ☐ RN-SOFT-001: Soft delete funciona corretamente
+☐ RN-USR-001: Departamento e unidade obrigatórios em todo usuário (criação e edição)
+☐ RN-USR-002: AVALIADOR_TECNICO restrito ao departamento STI (criação e edição de usuário)
 ```
 
 ---

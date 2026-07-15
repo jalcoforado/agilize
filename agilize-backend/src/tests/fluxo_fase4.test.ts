@@ -3,7 +3,7 @@ import { login } from './helpers';
 import {
   request, app, db,
   criarContextoFluxo, limparContexto, limparDemanda,
-  avancarParaHOMOLOGADA, PARECER, MOTIVO_DESATIVACAO,
+  avancarParaHOMOLOGADA, MOTIVO_DESATIVACAO,
   type ContextoFluxo,
 } from './setup_helpers';
 

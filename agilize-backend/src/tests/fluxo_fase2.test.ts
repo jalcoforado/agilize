@@ -4,7 +4,7 @@ import {
   request, app, db,
   criarContextoFluxo, limparContexto, limparDemanda,
   demandaPayload, avancarParaAPROVADA_STI,
-  PARECER, PARECER_GESTOR, MOTIVO_CANCELAMENTO,
+  PARECER_GESTOR, MOTIVO_CANCELAMENTO,
   type ContextoFluxo,
 } from './setup_helpers';
 

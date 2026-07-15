@@ -8,3 +8,5 @@ build/
 .vscode/
 .idea/
 coverage/
+test-email.ts
+src/db/backups/
